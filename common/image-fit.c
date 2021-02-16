@@ -1441,6 +1441,33 @@ int fit_image_check_comp(const void *fit, int noffset, uint8_t comp)
 		return 0;
 	return (comp == image_comp);
 }
+/**
+ * fdt_check_no_at() - Check for nodes whose names contain '@'
+ *
+ * This checks the parent node and all subnodes recursively
+ *
+ * @fit: FIT to check
+ * @parent: Parent node to check
+ * @return 0 if OK, -EADDRNOTAVAIL is a node has a name containing '@'
+ */
+static int fdt_check_no_at(const void *fit, int parent)
+{
+	const char *name;
+	int node;
+	int ret;
+
+	name = fdt_get_name(fit, parent, NULL);
+	if (!name || strchr(name, '@'))
+		return -EADDRNOTAVAIL;
+
+	fdt_for_each_subnode(node, fit, parent) {
+		ret = fdt_check_no_at(fit, node);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
 
 /**
  * fit_check_format - sanity check FIT image format
@@ -1460,6 +1487,12 @@ int fit_check_format(const void *fit)
 		debug("Wrong FIT format: not a flattened device tree\n");
 		return 0;
 	}
+
+    if (fdt_check_no_at(fit, 0))
+    {
+        debug("Format check prevents use of unit addresses (@)\n");
+        return 0;
+    }
 
 	/* mandatory / node 'description' property */
 	if (fdt_getprop(fit, 0, FIT_DESC_PROP, NULL) == NULL) {
