@@ -686,7 +686,8 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2600-slt.dtb \
 	ast2600-tacoma.dtb \
 	ast2600-intel.dtb \
-	ast2600-e4830-nvidia.dtb
+	ast2600-e4830-nvidia.dtb \
+	ast2600a1-lunadp.dtb
 
 dtb-$(CONFIG_ARCH_STI) += stih410-b2260.dtb
 
