@@ -17,8 +17,6 @@
 
 	aliases {
 		mmc0 = &emmc_slot0;
-		mmc1 = &sdhci_slot0;
-		mmc2 = &sdhci_slot1;
 		spi0 = &fmc;
 		spi1 = &spi1;
 		spi2 = &spi2;
