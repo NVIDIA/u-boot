@@ -10,4 +10,12 @@ config SYS_CONFIG_NAME
 	string "board configuration name"
 	default "evb_ast2600"
 
+config MACADDR_IN_EEPROM
+        bool "Configure if MAC address is stored in EEPROM"
+        depends on I2C_EEPROM
+        default n
+        help
+          This option is for reading MAC address from EEPROM
+          and set the MAC address in MAC env.
+
 endif

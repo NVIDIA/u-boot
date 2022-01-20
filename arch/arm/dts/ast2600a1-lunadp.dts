@@ -166,6 +166,13 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c8_default>;
+	eeprom@50 {
+		compatible = "atmel,24c02";
+		reg = <0x50>;
+		#pagesize = <16>;
+		/* offset for eth0, eth1, ..., with 0xff as undefined */
+		macoffset = <0xff 0xff 0x0 0xff 0xff 0xff>;
+	};
 };
 
 &i2c8 {
