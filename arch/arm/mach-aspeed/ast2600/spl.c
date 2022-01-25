@@ -18,6 +18,10 @@ DECLARE_GLOBAL_DATA_PTR;
 #define AST_BOOTMODE_EMMC	1
 #define AST_BOOTMODE_UART	2
 
+#define SCU_BASE		0x1e6e2000
+#define SCU_SMP_SEC_ENTRY	(SCU_BASE + 0x1bc)
+#define SCU_WPROT2		(SCU_BASE + 0xf04)
+
 u32 aspeed_bootmode(void);
 void aspeed_mmc_init(void);
 
@@ -93,6 +97,24 @@ int spl_start_uboot(void)
 	return 0;
 }
 #endif
+
+void board_fit_image_post_process(const void *fit, int node, void **p_image, size_t *p_size)
+{
+	ulong s_ep;
+	uint8_t os;
+
+	fit_image_get_os(fit, node, &os);
+
+	/* skip if no TEE */
+	if (os != IH_OS_TEE)
+		return;
+
+	fit_image_get_entry(fit, node, &s_ep);
+
+	/* set & lock secure entrypoint for secondary cores */
+	writel(s_ep, SCU_SMP_SEC_ENTRY);
+	writel(BIT(17) | BIT(18) | BIT(19), SCU_WPROT2);
+}
 
 int board_fit_config_name_match(const char *name)
 {
