@@ -67,10 +67,6 @@
 #define SEC_BASE		0x1e6f2000
 #define SEC_VAULT_KEY_CTRL	(SEC_BASE + 0x80c)
 
-#define AST_SEC_BASE		(0x1E6F2000)
-#define AST_SEC_VAULT_KEY_CTRL	(AST_SEC_BASE + 0x80C)
-
-/* Revision ID */
 #define REV_ID_AST2600A0	0x05000303
 #define REV_ID_AST2600A1	0x05010303
 #define REV_ID_AST2620A1	0x05010203
@@ -256,7 +252,7 @@ wait_lock:
 2:
 	/* Enable Vault Key Write Protection */
 	mov	r0, #0x2
-	ldr	r1, =AST_SEC_VAULT_KEY_CTRL
+	ldr	r1, =SEC_VAULT_KEY_CTRL
 	str	r0, [r1]
 
 	/* PCIeRC/E2M8 power-on reset comes from SCU040
