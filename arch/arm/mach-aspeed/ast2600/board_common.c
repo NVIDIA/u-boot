@@ -12,6 +12,10 @@
 #include <linux/err.h>
 #include <dm/uclass.h>
 
+#if defined(CONFIG_WDT_EARLY_BOOT)
+#include <wdt.h>
+#endif
+
 DECLARE_GLOBAL_DATA_PTR;
 
 /*
@@ -116,11 +120,36 @@ __weak int dram_init(void)
 	return 0;
 }
 
+#if defined(CONFIG_WDT_EARLY_BOOT)
+static void __maybe_unused wdt_early_boot_init(void)
+{
+	gd->arch.watchdog_dev = NULL;
+
+	if (uclass_get_device_by_seq(UCLASS_WDT, CONFIG_WDT_EARLY_BOOT_DEV,
+				&gd->arch.watchdog_dev)) {
+		debug("EARLY BOOT WDT: Not found by seq!\n");
+		if (uclass_get_device(UCLASS_WDT, CONFIG_WDT_EARLY_BOOT_DEV,
+					&gd->arch.watchdog_dev)) {
+			puts("EARLY BOOT WDT: Not found!\n");
+			return;
+		}
+	}
+
+	wdt_start(gd->arch.watchdog_dev, CONFIG_WDT_EARLY_BOOT_TIMEOUT * 1000,
+			0);
+	puts("EARLY BOOT WDT: Started\n");
+}
+#endif /* CONFIG_WDT */
+
 int arch_early_init_r(void)
 {
 #ifdef CONFIG_DM_PCI
 	/* Trigger PCIe devices detection */
 	pci_init();
+#endif
+#if defined(CONFIG_WDT_EARLY_BOOT)
+	/* Configure early boot watchdog */
+	wdt_early_boot_init();
 #endif
 
 	return 0;

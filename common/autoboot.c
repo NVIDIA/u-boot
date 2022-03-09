@@ -15,6 +15,10 @@
 #include <u-boot/sha256.h>
 #include <bootcount.h>
 
+#if defined(CONFIG_WDT_EARLY_BOOT)
+#include <wdt.h>
+#endif
+
 DECLARE_GLOBAL_DATA_PTR;
 
 #define MAX_DELAY_STOP_STR 32
@@ -262,10 +266,17 @@ static int abortboot(int bootdelay)
 	if (bootdelay >= 0)
 		abort = __abortboot(bootdelay);
 
+	if (abort) {
 #ifdef CONFIG_SILENT_CONSOLE
-	if (abort)
 		gd->flags &= ~GD_FLG_SILENT;
 #endif
+#if defined(CONFIG_WDT_EARLY_BOOT)
+		if (gd->arch.watchdog_dev) {
+			wdt_stop(gd->arch.watchdog_dev);
+			puts("EARLY BOOT WDT: Stopped\n");
+		}
+#endif
+	}
 
 	return abort;
 }
