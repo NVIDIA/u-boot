@@ -78,6 +78,10 @@ struct arch_global_data {
 #ifdef CONFIG_ARCH_IMX8
 	struct udevice *scu_dev;
 #endif
+
+#if defined(CONFIG_WDT_EARLY_BOOT)
+        struct udevice *watchdog_dev;
+#endif
 };
 
 #include <asm-generic/global_data.h>

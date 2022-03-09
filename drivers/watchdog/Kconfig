@@ -157,4 +157,24 @@ config WDT_MPC8xx
 	help
 	   Select this to enable mpc8xx watchdog timer
 
+config WDT_EARLY_BOOT
+	bool "Early boot watchdog"
+	depends on WDT
+	help
+	   Start an early boot watchdog timer.
+
+config WDT_EARLY_BOOT_TIMEOUT
+	int "Early boot watchdog timeout (ms)"
+	depends on WDT_EARLY_BOOT
+	default 240000
+	help
+	   Timeout for the early boot watchdog in milliseconds.
+
+config WDT_EARLY_BOOT_DEV
+	int "Early boot watchdog device"
+	depends on WDT_EARLY_BOOT
+	default 1
+	help
+	   Device to use for early boot watchdog.
+
 endmenu
