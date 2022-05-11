@@ -484,29 +484,70 @@ static int initr_enable_interrupts(void)
 }
 #endif
 
-#ifdef CONFIG_CMD_NET
-static int initr_ethaddr(void)
-{
-	bd_t *bd = gd->bd;
+#ifdef CONFIG_MACADDR_IN_EEPROM
+int eth_env_update_enetaddr_eeprom(const char *name, unsigned char *enetaddr);
+#endif
 
-	/* kept around for legacy kernels only ... ignore the next section */
-	eth_env_get_enetaddr("ethaddr", bd->bi_enetaddr);
+#ifdef CONFIG_MISC_INIT_R
+int misc_init_r(void) {
+  bd_t *bd = gd->bd;
+
+  /* kept around for legacy kernels only ... ignore the next section */
+#ifdef CONFIG_MACADDR_IN_EEPROM
+	eth_env_update_enetaddr_eeprom("ethaddr", bd->bi_enetaddr);
+#endif
 #ifdef CONFIG_HAS_ETH1
-	eth_env_get_enetaddr("eth1addr", bd->bi_enet1addr);
+#ifdef CONFIG_MACADDR_IN_EEPROM
+	eth_env_update_enetaddr_eeprom("eth1addr", bd->bi_enet1addr);
+#endif
 #endif
 #ifdef CONFIG_HAS_ETH2
-	eth_env_get_enetaddr("eth2addr", bd->bi_enet2addr);
+#ifdef CONFIG_MACADDR_IN_EEPROM
+	eth_env_update_enetaddr_eeprom("eth2addr", bd->bi_enet2addr);
+#endif
 #endif
 #ifdef CONFIG_HAS_ETH3
-	eth_env_get_enetaddr("eth3addr", bd->bi_enet3addr);
+#ifdef CONFIG_MACADDR_IN_EEPROM
+	eth_env_update_enetaddr_eeprom("eth3addr", bd->bi_enet3addr);
+#endif
 #endif
 #ifdef CONFIG_HAS_ETH4
-	eth_env_get_enetaddr("eth4addr", bd->bi_enet4addr);
+#ifdef CONFIG_MACADDR_IN_EEPROM
+	eth_env_update_enetaddr_eeprom("eth4addr", bd->bi_enet4addr);
+#endif
 #endif
 #ifdef CONFIG_HAS_ETH5
-	eth_env_get_enetaddr("eth5addr", bd->bi_enet5addr);
+#ifdef CONFIG_MACADDR_IN_EEPROM
+	eth_env_update_enetaddr_eeprom("eth5addr", bd->bi_enet5addr);
+#endif
 #endif
 	return 0;
+}
+#endif /* CONFIG_MISC_INIT_R */
+
+#ifdef CONFIG_CMD_NET
+static int initr_ethaddr(void) {
+  bd_t *bd = gd->bd;
+
+  /* kept around for legacy kernels only ... ignore the next section */
+  eth_env_get_enetaddr("ethaddr", bd->bi_enetaddr);
+
+#ifdef CONFIG_HAS_ETH1
+  eth_env_get_enetaddr("eth1addr", bd->bi_enet1addr);
+#endif
+#ifdef CONFIG_HAS_ETH2
+  eth_env_get_enetaddr("eth2addr", bd->bi_enet2addr);
+#endif
+#ifdef CONFIG_HAS_ETH3
+  eth_env_get_enetaddr("eth3addr", bd->bi_enet3addr);
+#endif
+#ifdef CONFIG_HAS_ETH4
+  eth_env_get_enetaddr("eth4addr", bd->bi_enet4addr);
+#endif
+#ifdef CONFIG_HAS_ETH5
+  eth_env_get_enetaddr("eth5addr", bd->bi_enet5addr);
+#endif
+  return 0;
 }
 #endif /* CONFIG_CMD_NET */
 
@@ -797,6 +838,7 @@ static init_fnc_t init_sequence_r[] = {
 #endif
 #ifdef CONFIG_CMD_NET
 	INIT_FUNC_WATCHDOG_RESET
+	/* MAC address and ether net driver initialization */
 	initr_net,
 #endif
 #ifdef CONFIG_POST

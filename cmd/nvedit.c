@@ -306,6 +306,29 @@ int env_set(const char *varname, const char *varvalue)
 		return _do_env_set(0, 3, (char * const *)argv, H_PROGRAMMATIC);
 }
 
+#ifdef CONFIG_MACADDR_IN_EEPROM
+int env_set_mac_force(const char *varname, const char *varvalue)
+{
+	int env_flag;
+	char env_addr;
+	const char * const argv[4] = { "setenv", varname, varvalue, NULL };
+
+	if(env_get(varname))
+		env_flag = H_PROGRAMMATIC | H_FORCE;
+	else
+		env_flag = H_PROGRAMMATIC;
+
+	/* before import into hashtable */
+	if (!(gd->flags & GD_FLG_ENV_READY))
+		return -EPERM;
+
+	if (varname == NULL || varvalue == NULL || varvalue[0] == '\0')
+		return -EINVAL;
+	else
+		return _do_env_set(0, 3, (char * const *)argv, env_flag);
+}
+#endif
+
 /**
  * Set an environment variable to an integer value
  *
