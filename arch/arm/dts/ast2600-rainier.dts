@@ -105,6 +105,19 @@
 	sdhci-drive-type = <1>;
 };
 
+&gpio0 {
+	u-boot,dm-pre-reloc;
+};
+
+&i2c12 {
+	status = "okay";
+
+	tpm@2e {
+		compatible = "nuvoton,npct75x";
+		reg = <0x2e>;
+	};
+};
+
 &hace {
 	u-boot,dm-pre-reloc;
 	status = "okay";
