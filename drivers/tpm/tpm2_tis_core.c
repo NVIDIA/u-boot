@@ -378,14 +378,6 @@ out:
 int tpm_tis_cleanup(struct udevice *dev)
 {
 	struct tpm_chip *chip = dev_get_priv(dev);
-	int ret;
-
-	ret = tpm_tis_request_locality(dev, 0);
-	if (ret)
-		return ret;
-
-	tpm_tis_ready(dev);
-
 	tpm_tis_release_locality(dev, chip->locality);
 
 	return 0;
@@ -433,15 +425,14 @@ int tpm_tis_init(struct udevice *dev)
 		log_err("Driver bug. No bus ops defined\n");
 		return -1;
 	}
+	ret = tpm_tis_request_locality(dev, 0);
+	if (ret)
+		return ret;
 
 	chip->timeout_a = TIS_SHORT_TIMEOUT_MS;
 	chip->timeout_b = TIS_LONG_TIMEOUT_MS;
 	chip->timeout_c = TIS_SHORT_TIMEOUT_MS;
 	chip->timeout_d = TIS_SHORT_TIMEOUT_MS;
-
-	ret = tpm_tis_request_locality(dev, 0);
-	if (ret)
-		return ret;
 
 	/* Disable interrupts */
 	phy_ops->read32(dev, TPM_INT_ENABLE(chip->locality), &tmp);
