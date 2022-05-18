@@ -53,7 +53,7 @@ static ulong nfs_timeout = NFS_TIMEOUT;
 
 static char dirfh[NFS_FHSIZE];	/* NFSv2 / NFSv3 file handle of directory */
 static char filefh[NFS3_FHSIZE]; /* NFSv2 / NFSv3 file handle */
-static int filefh3_length;	/* (variable) length of filefh when NFSv3 */
+static unsigned int filefh3_length;	/* (variable) length of filefh when NFSv3 */
 
 static enum net_loop_state nfs_download_state;
 static struct in_addr nfs_server_ip;
