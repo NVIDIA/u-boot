@@ -34,8 +34,6 @@ config TARGET_SLT_AST2600
 config TARGET_AST2600_IBM
 	bool "AST2600-IBM"
 	select BOARD_LATE_INIT
-	select TPM
-	select TPM2_TIS_I2C
 	help
 	  AST2600-IBM is IBM boards for AST2600 BMC based P0WER10+ servers
 
