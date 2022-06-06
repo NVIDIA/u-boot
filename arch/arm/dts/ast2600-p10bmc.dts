@@ -5,8 +5,8 @@
 #include "ast2600-u-boot.dtsi"
 
 / {
-	model = "IBM P10 BMC";
-	compatible = "ibm,everest-bmc", "ibm,rainier-bmc", "ibm,p10bmc", "aspeed,ast2600";
+        model = "IBM P10 BMC";
+        compatible = "ibm,everest-bmc", "ibm,rainier-bmc", "ibm,p10bmc", "aspeed,ast2600";
 
 	memory {
 		device_type = "memory";
@@ -41,6 +41,7 @@
 
 &sdrammc {
 	clock-frequency = <400000000>;
+	aspeed,ecc-enabled;
 };
 
 &wdt2 {
@@ -118,9 +119,4 @@
 &hace {
 	u-boot,dm-pre-reloc;
 	status = "okay";
-};
-
-&acry {
-	u-boot,dm-pre-reloc;
-	status = "disabled";
 };
