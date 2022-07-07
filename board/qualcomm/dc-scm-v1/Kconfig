@@ -1,0 +1,15 @@
+if TARGET_QUALCOMM_DC_SCM_V1
+
+config SYS_BOARD
+	default "dc-scm-v1"
+
+config SYS_VENDOR
+	default "qualcomm"
+
+config SYS_SOC
+	default "ast2600"
+
+config SYS_CONFIG_NAME
+	default "evb_ast2600a1_spl"
+
+endif

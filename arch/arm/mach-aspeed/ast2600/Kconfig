@@ -44,6 +44,13 @@ config TARGET_AST2600_INTEL
 	  AST2600-INTEL is an Intel Eagle Stream CRB with
 	  AST2600 as the BMC.
 
+config TARGET_QUALCOMM_DC_SCM_V1
+	bool "QUALCOMM-DC-SCM-V1"
+	depends on ASPEED_AST2600
+	help
+	  QUALCOMM-DC-SCM-V1 is a Qualcomm DC-SCM V1 board which is
+	  equipped with AST2600.
+
 endchoice
 
 source "board/aspeed/evb_ast2600/Kconfig"
@@ -51,5 +58,6 @@ source "board/aspeed/fpga_ast2600/Kconfig"
 source "board/aspeed/slt_ast2600/Kconfig"
 source "board/aspeed/ast2600_ibm/Kconfig"
 source "board/aspeed/ast2600_intel/Kconfig"
+source "board/qualcomm/dc-scm-v1/Kconfig"
 
 endif
