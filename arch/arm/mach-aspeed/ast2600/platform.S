@@ -39,6 +39,7 @@
 #define AST_SCU_REV_ID			(AST_SCU_BASE + 0x014)
 #define AST_SCU_SYSRST_CTRL		(AST_SCU_BASE + 0x040)
 #define AST_SCU_SYSRST_CTRL_CLR		(AST_SCU_BASE + 0x044)
+#define AST_SCU_SYSRST_EVENT		(AST_SCU_BASE + 0x064)
 #define AST_SCU_DEBUG_CTRL              (AST_SCU_BASE + 0x0C8)
 #define AST_SCU_DEBUG_CTRL2             (AST_SCU_BASE + 0x0D8)
 #define AST_SCU_HPLL_PARAM		(AST_SCU_BASE + 0x200)
@@ -237,13 +238,17 @@ wait_lock:
 
 2:
 	/* PCIeRC/E2M8 power-on reset comes from SCU040
-	But SCU04018 default value is 0x0.
-	It should be 0x1 to reset PCIeRC/E2M8.*/
+	It need set SCU040[18] high to reset PCIeRC/E2M
+	when AC power-on */
+	ldr	r0,  =AST_SCU_SYSRST_EVENT
+	ldr	r1, [r0]
+	tst	r1, #0x1
+	beq	3f
 	ldr     r0, =AST_SCU_SYSRST_CTRL
 	movw    r1, #0x0000
 	movt    r1, #0x0004
 	str     r1, [r0]
-
+3:
 	/* Fix UART1 route problem on A3 */
 	ldr     r0, =0x1e789098
 	movw    r1, #0x0a30
@@ -286,11 +291,13 @@ wait_lock:
 	str	r0, [r1]
 skip_fill_wip_bit:
 
+#if !defined(CONFIG_ASPEED_DEFAULT_SPI_FREQUENCY)
 	/* tune up SPI clock */
 	movw	r0, #0x0600
 	movt	r0, #0x0000
 	ldr	r1, =AST_FMC_CE0_CTRL
 	str	r0, [r1]
+#endif
 
 	/* disable FMC WDT for SPI address mode detection */
 	mov	r0, #0

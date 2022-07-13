@@ -3,8 +3,8 @@
 #include "ast2600-u-boot.dtsi"
 
 / {
-        model = "AST2600 FPGA";
-        compatible = "aspeed,ast2600-fpga", "aspeed,ast2600";
+	model = "AST2600 FPGA";
+	compatible = "aspeed,ast2600-fpga", "aspeed,ast2600";
 
 	memory {
 		device_type = "memory";

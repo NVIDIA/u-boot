@@ -31,6 +31,14 @@ config TARGET_SLT_AST2600
 	help
 	  SLT-AST2600 is Aspeed SLT board for AST2600 chip.
 
+config TARGET_AST2600_IBM
+	bool "AST2600-IBM"
+	select BOARD_LATE_INIT
+	select TPM
+	select TPM2_TIS_I2C
+	help
+	  AST2600-IBM is IBM boards for AST2600 BMC based P0WER10+ servers
+
 config TARGET_AST2600_INTEL
 	bool "AST2600-INTEL"
 	depends on ASPEED_AST2600
@@ -43,6 +51,7 @@ endchoice
 source "board/aspeed/evb_ast2600/Kconfig"
 source "board/aspeed/fpga_ast2600/Kconfig"
 source "board/aspeed/slt_ast2600/Kconfig"
+source "board/aspeed/ast2600_ibm/Kconfig"
 source "board/aspeed/ast2600_intel/Kconfig"
 
 endif

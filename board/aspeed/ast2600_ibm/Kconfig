@@ -1,0 +1,13 @@
+if TARGET_AST2600_IBM
+
+config SYS_BOARD
+	default "ast2600_ibm"
+
+config SYS_VENDOR
+	default "aspeed"
+
+config SYS_CONFIG_NAME
+	string "board configuration name"
+	default "ast2600_ibm"
+
+endif

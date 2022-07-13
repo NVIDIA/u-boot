@@ -74,6 +74,11 @@ static void __maybe_unused espi_init(void)
 {
 	u32 reg;
 
+	/* skip eSPI init if LPC mode is selected */
+	reg = readl(SCU_BASE + 0x510);
+	if (reg & BIT(6))
+		return;
+
 	/*
 	 * Aspeed STRONGLY NOT recommend to use eSPI early init.
 	 *
@@ -122,7 +127,7 @@ int board_early_init_f(void)
 #if 0
 	port80h_snoop_init();
 	sgpio_init();
-	espi_init();
 #endif
+	espi_init();
 	return 0;
 }

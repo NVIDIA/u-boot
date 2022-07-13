@@ -24,8 +24,10 @@ void aspeed_mmc_init(void);
 void board_init_f(ulong dummy)
 {
 #ifndef CONFIG_SPL_TINY
+	struct udevice *dev;
 	spl_early_init();
 	timer_init();
+	uclass_get_device(UCLASS_PINCTRL, 0, &dev);
 	preloader_console_init();
 	dram_init();
 	aspeed_mmc_init();
@@ -37,9 +39,10 @@ void spl_board_init(void)
 {
 	struct udevice *dev;
 
-	if (uclass_get_device_by_driver(UCLASS_MISC,
-				DM_GET_DRIVER(aspeed_hace),
-				&dev)) {
+	if ((IS_ENABLED(CONFIG_ASPEED_HACE_V1) || IS_ENABLED(CONFIG_ASPEED_HACE)) &&
+	    uclass_get_device_by_driver(UCLASS_MISC,
+					DM_GET_DRIVER(aspeed_hace),
+					&dev)) {
 		debug("Warning: HACE initialization failure\n");
 	}
 }
@@ -47,7 +50,7 @@ void spl_board_init(void)
 
 u32 spl_boot_device(void)
 {
-#if IS_ENABLED(CONFIG_ASPEED_LOADERS)
+#ifdef CONFIG_ASPEED_LOADERS
 	switch (aspeed_bootmode()) {
 	case AST_BOOTMODE_EMMC:
 		return (IS_ENABLED(CONFIG_ASPEED_SECURE_BOOT))?
@@ -69,6 +72,8 @@ u32 spl_boot_device(void)
 		return BOOT_DEVICE_RAM;
 	case AST_BOOTMODE_UART:
 		return BOOT_DEVICE_UART;
+	default:
+		break;
 	}
 #endif
 
