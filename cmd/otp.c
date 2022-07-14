@@ -305,33 +305,6 @@ static int get_rid_num(u32 *rid)
 	return rid_num;
 }
 
-static void sb_sha256(u8 *src, u32 len, u8 *digest_ret)
-{
-	sha256_context ctx;
-
-	sha256_starts(&ctx);
-	sha256_update(&ctx, src, len);
-	sha256_finish(&ctx, digest_ret);
-}
-
-static void sb_sha384(u8 *src, u32 len, u8 *digest_ret)
-{
-	sha512_context ctx;
-
-	sha384_starts(&ctx);
-	sha384_update(&ctx, src, len);
-	sha384_finish(&ctx, digest_ret);
-}
-
-static void sb_sha512(u8 *src, u32 len, u8 *digest_ret)
-{
-	sha512_context ctx;
-
-	sha512_starts(&ctx);
-	sha512_update(&ctx, src, len);
-	sha512_finish(&ctx, digest_ret);
-}
-
 static u32 chip_version(void)
 {
 	u32 revid0, revid1;
@@ -1912,6 +1885,18 @@ static int otp_check_scu_image(struct otp_image_layout *image_layout, u32 *scu_p
 	return OTP_SUCCESS;
 }
 
+static void do_hash(const void *data, int data_len, const char *algo_name, uint8_t *value)
+{
+        struct hash_algo *algo;
+
+        if (hash_lookup_algo(algo_name, &algo)) {
+                debug("Unsupported hash alogrithm\n");
+                return;
+        }
+
+        algo->hash_func_ws(data, data_len, value, algo->chunk_size);
+}
+
 static int otp_verify_image(u8 *src_buf, u32 length, u8 *digest_buf, int version)
 {
 	u8 digest_ret[48];
@@ -1919,11 +1904,11 @@ static int otp_verify_image(u8 *src_buf, u32 length, u8 *digest_buf, int version
 
 	switch (version) {
 	case 1:
-		sb_sha256(src_buf, length, digest_ret);
+		do_hash(src_buf, length, "sha256", digest_ret);
 		digest_len = 32;
 		break;
 	case 2:
-		sb_sha384(src_buf, length, digest_ret);
+		do_hash(src_buf, length, "sha384", digest_ret);
 		digest_len = 48;
 		break;
 	default:
@@ -2549,13 +2534,13 @@ static int sb_sha(struct sb_info *si, u8 *sec_image, u32 sign_image_size, u8 *di
 		printf("otp verify does not support SHA224\n");
 		return OTP_FAILURE;
 	case 256:
-		sb_sha256(sec_image, sign_image_size, digest_ret);
+		do_hash(sec_image, sign_image_size, "sha256", digest_ret);
 		break;
 	case 384:
-		sb_sha384(sec_image, sign_image_size, digest_ret);
+		do_hash(sec_image, sign_image_size, "sha384", digest_ret);
 		break;
 	case 512:
-		sb_sha512(sec_image, sign_image_size, digest_ret);
+		do_hash(sec_image, sign_image_size, "sha512", digest_ret);
 		break;
 	default:
 		printf("SHA Algorithm is invalid\n");
