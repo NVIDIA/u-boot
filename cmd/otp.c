@@ -133,11 +133,11 @@ struct otpstrap_status {
 };
 
 struct otpkey_type {
-	int value;
-	int key_type;
-	int order;
-	int need_id;
-	char information[110];
+	int value: 4;
+	int key_type: 4;
+	int order: 1;
+	int need_id: 1;
+	char *information;
 };
 
 struct otp_pro_sts {
