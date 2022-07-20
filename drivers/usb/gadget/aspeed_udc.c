@@ -4,29 +4,31 @@
  *
  */
 
+#include <malloc.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
+#include <asm/cache.h>
+#include <asm/dma-mapping.h>
 #include <common.h>
 #include <config.h>
 #include <dm.h>
 #include <fdtdec.h>
 #include <reset.h>
-#include <usbdevice.h>
+#include <linux/usb/ch9.h>
+#include <linux/usb/gadget.h>
+#include <linux/usb/otg.h>
 
-#include "ep0.h"
+#include "aspeed_udc.h"
 
 /* number of endpoints on this UDC */
 #define UDC_MAX_ENDPOINTS	21
+#define EP_DMA_SIZE		2048
 
-static struct urb *ep0_urb;
-static struct usb_device_instance *udc_device;
+/* define to use descriptor mode */
+#define AST_EP_DESC_MODE
 
-struct aspeed_udc_priv {
-	u32 udc_base;
-	int init;
-};
-
-struct aspeed_udc_priv *aspeed_udc;
+/* could be 32/256 stages */
+#define AST_EP_NUM_OF_DESC	256
 
 /*************************************************************************************/
 #define AST_VHUB_CTRL				0x00
@@ -52,6 +54,7 @@ struct aspeed_udc_priv *aspeed_udc;
 /*  ************************************************************************************/
 /* AST_VHUB_CTRL				0x00 */
 #define ROOT_PHY_CLK_EN				BIT(31)
+#define EP_LONG_DESC_MODE			BIT(18)
 #define ROOT_PHY_RESET_DIS			BIT(11)
 #define ROOT_UPSTREAM_EN			BIT(0)
 
@@ -112,622 +115,1051 @@ struct aspeed_udc_priv *aspeed_udc;
 #define EP_ENABLE				BIT(0)
 
 /* AST_EP_DMA_CTRL				0x04 */
+#define EP_DMA_IN_LONG_MODE			BIT(3)
+#define EP_RESET_DESC_OP			BIT(2)
 #define EP_SINGLE_DESC_MODE			BIT(1)
+#define EP_DESC_OP_ENABLE			BIT(0)
 
 /* AST_EP_DMA_STS				0x0C */
 #define AST_EP_TX_DATA_BYTE(x)			(((x) & 0x3ff) << 16)
 #define AST_EP_START_TRANS			BIT(0)
 
-/*-------------------------------------------------------------------------*/
-#define ast_udc_read(offset) \
-	__raw_readl(aspeed_udc->udc_base + (offset))
-#define ast_udc_write(val, offset) \
-	__raw_writel((u32)val, aspeed_udc->udc_base + (offset))
+/* Desc W1 IN */
+#define VHUB_DSC1_IN_INTERRUPT			BIT(31)
+#define VHUB_DSC1_IN_SPID_DATA0			(0 << 14)
+#define VHUB_DSC1_IN_SPID_DATA2			BIT(14)
+#define VHUB_DSC1_IN_SPID_DATA1			(2 << 14)
+#define VHUB_DSC1_IN_SPID_MDATA			(3 << 14)
+#define VHUB_DSC1_IN_SET_LEN(x)			((x) & 0xfff)
+#define VHUB_DSC1_IN_LEN(x)			((x) & 0xfff)
+#define VHUB_DSC1_OUT_LEN(x)			((x) & 0x7ff)
 
-#define ast_ep_read(ep_reg, reg) \
-	__raw_readl((ep_reg) + (reg))
-#define ast_ep_write(ep_reg, val, reg) \
-	__raw_writel((u32)val, (ep_reg) + (reg))
-/*-------------------------------------------------------------------------*/
+#define AST_SETUP_DEBUG
+#define AST_UDC_DEBUG
+#define AST_EP_DEBUG
 
-int is_usbd_high_speed(void)
+#ifdef AST_SETUP_DEBUG
+#define SETUP_DBG(fmt, args...) pr_debug("%s() " fmt, __func__, ##args)
+#else
+#define SETUP_DBG(fmt, args...)
+#endif
+
+#ifdef AST_UDC_DEBUG
+#define UDC_DBG(fmt, args...) pr_debug("%s() " fmt, __func__, ##args)
+#else
+#define UDC_DBG(fmt, args...)
+#endif
+
+#ifdef AST_EP_DEBUG
+#define EP_DBG(fmt, args...) pr_debug("%s() " fmt, __func__, ##args)
+#else
+#define EP_DBG(fmt, args...)
+#endif
+
+static void aspeed_udc_done(struct aspeed_udc_ep *ep,
+			    struct aspeed_udc_request *req, int status)
 {
-	if (ast_udc_read(AST_VHUB_USB_STS) & USB_BUS_HIGH_SPEED)
-		return 1;
+	EP_DBG("%s len: (%d/%d) buf: %p, dir: %s\n",
+	       ep->ep.name, req->req.actual, req->req.length, req->req.buf,
+	       ep->ep_dir ? "IN" : "OUT");
 
-	return 0;
-}
+	list_del(&req->queue);
 
-static void udc_stall_ep(u32 ep_num)
-{
-	u32 ep_reg;
-
-	usbdbg("stall ep: %d", ep_num);
-
-	if (ep_num) {
-		ep_reg = aspeed_udc->udc_base + AST_EP_BASE +
-			 (AST_EP_OFFSET * (ep_num - 1));
-		ast_ep_write(ep_reg, ast_ep_read(ep_reg, AST_EP_CONFIG) |
-			     EP_SET_EP_STALL,
-			     AST_EP_CONFIG);
-
-	} else {
-		ast_udc_write(ast_udc_read(AST_VHUB_EP0_CTRL) | EP0_STALL,
-			      AST_VHUB_EP0_CTRL);
-	}
-}
-
-int udc_endpoint_write(struct usb_endpoint_instance *endpoint)
-{
-	struct urb *urb = endpoint->tx_urb;
-	u32 remaining_packet;
-	u32 ep_reg, length;
-	int timeout = 2000; // 2ms
-	int ep_num;
-	u8 *data;
-
-	if (!endpoint) {
-		usberr("Error input: endpoint\n");
-		return -1;
-	}
-
-	ep_num = endpoint->endpoint_address & USB_ENDPOINT_NUMBER_MASK;
-	ep_reg = aspeed_udc->udc_base + AST_EP_BASE + (AST_EP_OFFSET * (ep_num - 1));
-	remaining_packet = urb->actual_length - endpoint->sent;
-
-	if (endpoint->tx_packetSize < remaining_packet)
-		length = endpoint->tx_packetSize;
+	if (req->req.status == -EINPROGRESS)
+		req->req.status = status;
 	else
-		length = remaining_packet;
+		status = req->req.status;
 
-//	usbdbg("ep: %d, trans len: %d, ep sent: %d, urb actual len: %d\n",
-//		ep_num, length, endpoint->sent, urb->actual_length);
+	if (status && status != -ESHUTDOWN)
+		EP_DBG("%s done %p, status %d\n", ep->ep.name, req, status);
 
-	data = (u8 *)urb->buffer;
-	data += endpoint->sent;
-
-	// tx trigger
-	ast_ep_write(ep_reg, data, AST_EP_DMA_BUFF);
-	ast_ep_write(ep_reg, AST_EP_TX_DATA_BYTE(length), AST_EP_DMA_STS);
-	ast_ep_write(ep_reg, AST_EP_TX_DATA_BYTE(length) | AST_EP_START_TRANS,
-		     AST_EP_DMA_STS);
-
-	endpoint->last = length;
-
-	// wait for tx complete
-	while (ast_ep_read(ep_reg, AST_EP_DMA_STS) & 0x1) {
-		if (timeout-- == 0)
-			return -1;
-
-		udelay(1);
-	}
-
-	return 0;
+	usb_gadget_giveback_request(&ep->ep, &req->req);
 }
 
-static void ast_udc_ep_handle(struct usb_endpoint_instance *endpoint)
+void ast_udc_ep0_data_tx(struct aspeed_udc_priv *udc, u8 *tx_data, u32 len)
 {
-	int ep_isout, ep_num;
-	int nbytes;
-	u32 ep_reg;
+	u32 reg = udc->udc_base;
 
-	ep_isout = (endpoint->endpoint_address & USB_ENDPOINT_DIR_MASK) ==
-		   USB_DIR_OUT;
-	ep_num = endpoint->endpoint_address & USB_ENDPOINT_NUMBER_MASK;
+	if (len) {
+		memcpy(udc->ep0_ctrl_buf, tx_data, len);
 
-	ep_reg = aspeed_udc->udc_base + AST_EP_BASE + (AST_EP_OFFSET * (ep_num - 1));
+		writel(udc->ep0_ctrl_dma, reg + AST_VHUB_EP0_DATA_BUFF);
+		writel(EP0_TX_LEN(len), reg + AST_VHUB_EP0_CTRL);
+		writel(EP0_TX_LEN(len) | EP0_TX_BUFF_RDY,
+		       reg + AST_VHUB_EP0_CTRL);
 
-	if (ep_isout) {
-		nbytes = (ast_ep_read(ep_reg, AST_EP_DMA_STS) >> 16) & 0x7ff;
-		usbd_rcv_complete(endpoint, nbytes, 0);
-
-		//trigger next
-		ast_ep_write(ep_reg, AST_EP_START_TRANS, AST_EP_DMA_STS);
+		udc->is_udc_control_tx = 1;
 
 	} else {
-		usbd_tx_complete(endpoint);
+		writel(EP0_TX_BUFF_RDY, reg + AST_VHUB_EP0_CTRL);
 	}
 }
 
-static void ast_udc_ep0_rx(struct usb_endpoint_instance *endpoint)
+static void aspeed_udc_getstatus(struct aspeed_udc_priv *udc)
 {
-	struct urb *urb;
-	u8 *buff;
+	u32 reg = udc->udc_base;
+	u32 status = 0;
+	int epnum;
 
-	if (!endpoint) {
-		usberr("Error input: endpoint\n");
-		return;
+	switch (udc->root_setup->bRequestType & USB_RECIP_MASK) {
+	case USB_RECIP_DEVICE:
+		/* Get device status */
+		status = 1 << USB_DEVICE_SELF_POWERED;
+		break;
+	case USB_RECIP_INTERFACE:
+		break;
+	case USB_RECIP_ENDPOINT:
+		epnum = udc->root_setup->wIndex & USB_ENDPOINT_NUMBER_MASK;
+		status = udc->ep[epnum].stopped;
+		break;
+	default:
+		goto stall;
 	}
 
-	urb = endpoint->rcv_urb;
-	if (!urb) {
-		usberr("Error: rcv_urb is empty\n");
-		return;
-	}
+	EP_DBG("%s: response status: %d\n", __func__, status);
+	ast_udc_ep0_data_tx(udc, (u8 *)&status, sizeof(status));
 
-	buff = urb->buffer;
-	ast_udc_write(buff, AST_VHUB_EP0_DATA_BUFF);
+	return;
 
-	// trigger rx
-	ast_udc_write(EP0_RX_BUFF_RDY, AST_VHUB_EP0_CTRL);
+stall:
+	pr_err("Can't respond to %s request\n", __func__);
+	writel(readl(reg + AST_VHUB_EP0_CTRL) | EP0_STALL,
+	       reg + AST_VHUB_EP0_CTRL);
 }
 
-static void ast_udc_ep0_out(struct usb_endpoint_instance *endpoint)
+static void aspeed_udc_nuke(struct aspeed_udc_ep *ep, int status)
 {
-	u16 rx_len = EP0_GET_RX_LEN(ast_udc_read(AST_VHUB_EP0_CTRL));
-
-	/* Check direction */
-	if ((ep0_urb->device_request.bmRequestType & USB_REQ_DIRECTION_MASK) ==
-		USB_REQ_DEVICE2HOST) {
-		if (rx_len != 0)
-			usberr("Unexpected USB REQ direction: D2H\n");
-
-	} else {
-		usbdbg("EP0 OUT packet ACK, sent zero-length packet");
-		ast_udc_write(EP0_TX_BUFF_RDY, AST_VHUB_EP0_CTRL);
-	}
-}
-
-static void ast_udc_ep0_tx(struct usb_endpoint_instance *endpoint)
-{
-	struct urb *urb;
-	u32 last;
-
-	if (!endpoint) {
-		usberr("Error input: endpoint\n");
+	if (!&ep->queue)
 		return;
-	}
 
-	urb = endpoint->tx_urb;
-	if (!urb) {
-		usberr("Error: tx_urb is empty\n");
-		return;
-	}
+	while (!list_empty(&ep->queue)) {
+		struct aspeed_udc_request *req;
 
-	usbdbg("urb->buffer: %p, buffer_length: %d, actual_length: %d, sent:%d",
-	       urb->buffer, urb->buffer_length,
-	       urb->actual_length, endpoint->sent);
-
-	last = min((int)(urb->actual_length - endpoint->sent),
-		   (int)endpoint->tx_packetSize);
-
-	if (last) {
-		u8 *cp = urb->buffer + endpoint->sent;
-
-		usbdbg("send address %x", (u32)cp);
-
-		/*
-		 * This ensures that USBD packet fifo is accessed
-		 * - through word aligned pointer or
-		 * - through non word aligned pointer but only
-		 *   with a max length to make the next packet
-		 *   word aligned
-		 */
-
-		usbdbg("ep sent: %d, tx_packetSize: %d, last: %d",
-		       endpoint->sent, endpoint->tx_packetSize, last);
-
-		ast_udc_write(cp, AST_VHUB_EP0_DATA_BUFF);
-
-		// trigger tx
-		ast_udc_write(EP0_TX_LEN(last), AST_VHUB_EP0_CTRL);
-		ast_udc_write(EP0_TX_LEN(last) | EP0_TX_BUFF_RDY, AST_VHUB_EP0_CTRL);
-	}
-
-	endpoint->last = last;
-}
-
-void ast_udc_ep0_in(struct usb_endpoint_instance *endpoint)
-{
-	struct usb_device_request *request = &ep0_urb->device_request;
-
-	usbdbg("ast_udc_ep0_in");
-
-	/* Check direction */
-	if ((request->bmRequestType & USB_REQ_DIRECTION_MASK) ==
-	    USB_REQ_HOST2DEVICE) {
-		/*
-		 * This tx interrupt must be for a control write status
-		 * stage packet.
-		 */
-		usbdbg("ACK on EP0 control write status stage packet");
-	} else {
-		/*
-		 * This tx interrupt must be for a control read data
-		 * stage packet.
-		 */
-		int wLength = le16_to_cpu(request->wLength);
-
-		/*
-		 * Update our count of bytes sent so far in this
-		 * transfer.
-		 */
-		endpoint->sent += endpoint->last;
-
-		/*
-		 * We are finished with this transfer if we have sent
-		 * all of the bytes in our tx urb (urb->actual_length)
-		 * unless we need a zero-length terminating packet.  We
-		 * need a zero-length terminating packet if we returned
-		 * fewer bytes than were requested (wLength) by the host,
-		 * and the number of bytes we returned is an exact
-		 * multiple of the packet size endpoint->tx_packetSize.
-		 */
-		if (endpoint->sent == ep0_urb->actual_length &&
-		    (ep0_urb->actual_length == wLength ||
-		     endpoint->last != endpoint->tx_packetSize)) {
-			/* Done with control read data stage. */
-			usbdbg("control read data stage complete");
-			//trigger for rx
-			endpoint->rcv_urb = ep0_urb;
-			endpoint->sent = 0;
-			ast_udc_ep0_rx(endpoint);
-
-		} else {
-			/*
-			 * We still have another packet of data to send
-			 * in this control read data stage or else we
-			 * need a zero-length terminating packet.
-			 */
-			usbdbg("ACK control read data stage packet");
-
-			ast_udc_ep0_tx(endpoint);
-		}
+		req = list_entry(ep->queue.next, struct aspeed_udc_request,
+				 queue);
+		aspeed_udc_done(ep, req, status);
 	}
 }
 
-static void ast_udc_setup_handle(struct usb_endpoint_instance *endpoint)
+static void aspeed_udc_setup_handle(struct aspeed_udc_priv *udc)
 {
-	u32 *setup = (u32 *)(aspeed_udc->udc_base + AST_VHUB_SETUP_DATA0);
-	u8 *datap = (u8 *)&ep0_urb->device_request;
+	u8 bRequestType = udc->root_setup->bRequestType;
+	u8 bRequest = udc->root_setup->bRequest;
+	u16 ep_num = udc->root_setup->wIndex & USB_ENDPOINT_NUMBER_MASK;
+	struct aspeed_udc_request *req;
+	u32 base = udc->udc_base;
+	int i = 0;
+	int ret;
 
-	usbdbg("-> Entering device setup");
+	SETUP_DBG("%s: %x, %s: %x, %s: %x, %s: %x, %s: %d\n",
+		  "bRequestType", bRequestType, "bRequest", bRequest,
+		  "wValue", udc->root_setup->wValue,
+		  "wIndex", udc->root_setup->wIndex,
+		  "wLength", udc->root_setup->wLength);
 
-	/* 8 bytes setup packet */
-	memcpy(datap, setup, sizeof(setup) * 2);
-
-	/* Try to process setup packet */
-	if (ep0_recv_setup(ep0_urb)) {
-		/* Not a setup packet, stall next EP0 transaction */
-		udc_stall_ep(0);
-		usbinfo("Cannot parse setup packet, wait another setup...\n");
-		return;
+	list_for_each_entry(req, &udc->ep[0].queue, queue) {
+		i++;
+		pr_err("[%d] there is req %x in ep0 queue\n", i, (u32)req);
 	}
 
-	/* Check direction */
-	if ((ep0_urb->device_request.bmRequestType & USB_REQ_DIRECTION_MASK) ==
-	    USB_REQ_HOST2DEVICE) {
-		switch (ep0_urb->device_request.bRequest) {
+	aspeed_udc_nuke(&udc->ep[0], -ETIMEDOUT);
+
+	udc->ep[0].ep_dir = bRequestType & USB_DIR_IN;
+
+	if ((bRequestType & USB_TYPE_MASK) == USB_TYPE_STANDARD) {
+		switch (bRequest) {
 		case USB_REQ_SET_ADDRESS:
-			usbdbg("set addr: %x", ep0_urb->device_request.wValue);
-			ast_udc_write(ep0_urb->device_request.wValue,
-				      AST_VHUB_CONF);
-			ast_udc_write(EP0_TX_BUFF_RDY, AST_VHUB_EP0_CTRL);
-			usbd_device_event_irq(udc_device,
-					      DEVICE_ADDRESS_ASSIGNED, 0);
+			SETUP_DBG("Set addr: %x\n", udc->root_setup->wValue);
+
+			if (readl(base + AST_VHUB_USB_STS) &
+			    USB_BUS_HIGH_SPEED)
+				udc->gadget.speed = USB_SPEED_HIGH;
+			else
+				udc->gadget.speed = USB_SPEED_FULL;
+
+			writel(udc->root_setup->wValue, base + AST_VHUB_CONF);
+			writel(EP0_TX_BUFF_RDY, base + AST_VHUB_EP0_CTRL);
 			break;
 
-		case USB_REQ_SET_CONFIGURATION:
-			usbdbg("set configuration");
-			ast_udc_write(EP0_TX_BUFF_RDY, AST_VHUB_EP0_CTRL);
-			usbd_device_event_irq(udc_device,
-					      DEVICE_CONFIGURED, 0);
+		case USB_REQ_CLEAR_FEATURE:
+			SETUP_DBG("USB_REQ_CLEAR_FEATURE ep: %d\n", ep_num);
+			writel(EP0_TX_BUFF_RDY, base + AST_VHUB_EP0_CTRL);
+			break;
+
+		case USB_REQ_SET_FEATURE:
+			SETUP_DBG("USB_REQ_SET_FEATURE ep: %d\n", ep_num);
+			break;
+
+		case USB_REQ_GET_STATUS:
+			SETUP_DBG("USB_REQ_GET_STATUS\n");
+			aspeed_udc_getstatus(udc);
 			break;
 
 		default:
-			if (ep0_urb->device_request.wLength) {
-				endpoint->rcv_urb = ep0_urb;
-				endpoint->sent = 0;
-				ast_udc_ep0_rx(endpoint);
-
-			} else {
-				// send zero-length IN packet
-				ast_udc_write(EP0_TX_BUFF_RDY,
-					      AST_VHUB_EP0_CTRL);
-			}
+			ret = udc->gadget_driver->setup(&udc->gadget,
+				udc->root_setup);
+			if (ret < 0)
+				pr_err("Gadget setup failed, ret: 0x%x\n",
+				       ret);
 			break;
 		}
 
 	} else {
-		usbdbg("control read on EP0");
-		/*
-		 * The ep0_recv_setup function has already placed our response
-		 * packet data in ep0_urb->buffer and the packet length in
-		 * ep0_urb->actual_length.
-		 */
-		endpoint->tx_urb = ep0_urb;
-		endpoint->sent = 0;
-		ast_udc_ep0_tx(endpoint);
+		SETUP_DBG("non-standard request type\n");
+		ret = udc->gadget_driver->setup(&udc->gadget, udc->root_setup);
+		if (ret < 0)
+			pr_err("Gadget setup failed, ret: 0x%x\n", ret);
 	}
-
-	usbdbg("<- Leaving device setup");
 }
 
-void udc_irq(void)
+static void aspeed_udc_ep0_queue(struct aspeed_udc_ep *ep,
+				 struct aspeed_udc_request *req)
 {
-	u32 isr = ast_udc_read(AST_VHUB_ISR);
+	struct aspeed_udc_priv *udc = ep->udc;
+	u16 tx_len;
+	u32 reg;
+
+	if ((req->req.length - req->req.actual) > ep->ep.maxpacket)
+		tx_len = ep->ep.maxpacket;
+	else
+		tx_len = req->req.length - req->req.actual;
+
+	writel(req->req.dma + req->req.actual,
+	       udc->udc_base + AST_VHUB_EP0_DATA_BUFF);
+
+	SETUP_DBG("ep0 REQ buf: %x, dma: %x , txlen: %d (%d/%d) ,dir: %s\n",
+		  (u32)req->req.buf, req->req.dma + req->req.actual,
+		  tx_len, req->req.actual, req->req.length,
+		  ep->ep_dir ? "IN" : "OUT");
+
+	reg = udc->udc_base + AST_VHUB_EP0_CTRL;
+	if (ep->ep_dir) {
+		req->req.actual += tx_len;
+		writel(EP0_TX_LEN(tx_len), reg);
+		writel(EP0_TX_LEN(tx_len) | EP0_TX_BUFF_RDY, reg);
+
+	} else {
+		if (!req->req.length) {
+			writel(EP0_TX_BUFF_RDY, reg);
+			ep->ep_dir = 0x80;
+		} else {
+			writel(EP0_RX_BUFF_RDY, reg);
+		}
+	}
+}
+
+static void aspeed_udc_ep0_rx(struct aspeed_udc_priv *udc)
+{
+	SETUP_DBG("%s: enter\n", __func__);
+
+	writel(udc->ep0_ctrl_dma, udc->udc_base + AST_VHUB_EP0_DATA_BUFF);
+	writel(EP0_RX_BUFF_RDY, udc->udc_base + AST_VHUB_EP0_CTRL);
+}
+
+static void aspeed_udc_ep0_tx(struct aspeed_udc_priv *udc)
+{
+	SETUP_DBG("%s: enter\n", __func__);
+
+	writel(udc->ep0_ctrl_dma, udc->udc_base + AST_VHUB_EP0_DATA_BUFF);
+	writel(EP0_TX_BUFF_RDY, udc->udc_base + AST_VHUB_EP0_CTRL);
+}
+
+static void aspeed_udc_ep0_in(struct aspeed_udc_priv *udc)
+{
+	struct aspeed_udc_ep *ep = &udc->ep[0];
+	struct aspeed_udc_request *req;
+
+	if (list_empty(&ep->queue)) {
+		if (udc->is_udc_control_tx) {
+			SETUP_DBG("is_udc_control_tx\n");
+			aspeed_udc_ep0_rx(udc);
+			udc->is_udc_control_tx = 0;
+		}
+		return;
+
+	} else {
+		req = list_entry(ep->queue.next, struct aspeed_udc_request,
+				 queue);
+	}
+
+	SETUP_DBG("req=%x (%d/%d)\n", (u32)req, req->req.length,
+		  req->req.actual);
+
+	if (req->req.length == req->req.actual) {
+		if (req->req.length)
+			aspeed_udc_ep0_rx(udc);
+
+		if (ep->ep_dir)
+			aspeed_udc_done(ep, req, 0);
+
+	} else {
+		aspeed_udc_ep0_queue(ep, req);
+	}
+}
+
+void aspeed_udc_ep0_out(struct aspeed_udc_priv *udc)
+{
+	struct aspeed_udc_ep *ep = &udc->ep[0];
+	struct aspeed_udc_request *req;
+	u16 rx_len;
+
+	rx_len = EP0_GET_RX_LEN(readl(udc->udc_base + AST_VHUB_EP0_CTRL));
+
+	if (list_empty(&ep->queue))
+		return;
+
+	req = list_entry(ep->queue.next, struct aspeed_udc_request,
+			 queue);
+
+	req->req.actual += rx_len;
+
+	SETUP_DBG("req %x (%d/%d)\n", (u32)req, req->req.length,
+		  req->req.actual);
+
+	if (rx_len < ep->ep.maxpacket ||
+	    req->req.actual == req->req.length) {
+		aspeed_udc_ep0_tx(udc);
+		if (!ep->ep_dir)
+			aspeed_udc_done(ep, req, 0);
+
+	} else {
+		ep->ep_dir = 0;
+		aspeed_udc_ep0_queue(ep, req);
+	}
+}
+
+static int aspeed_dma_descriptor_setup(struct aspeed_udc_ep *ep,
+				       unsigned int dma_address, u32 tx_len,
+				       struct aspeed_udc_request *req)
+{
+	u32 packet_len;
+	u32 chunk;
+	int i;
+
+	if (!ep->dma_desc_list) {
+		pr_err("%s: %s %s\n", __func__, ep->ep.name,
+		       "failed due to empty DMA descriptor list");
+		return -1;
+	}
+
+	packet_len = tx_len;
+	chunk = ep->chunk_max;
+	i = 0;
+	while (packet_len > 0) {
+		EP_DBG("%s: %s:%d, %s:0x%x, %s:%d %s:%d (%s:0x%x)\n",
+		       ep->ep.name,
+		       "wptr", ep->dma_desc_list_wptr,
+		       "dma_address", dma_address,
+		       "packet_len", packet_len,
+		       "chunk", chunk,
+		       "tx_len", tx_len);
+
+		ep->dma_desc_list[ep->dma_desc_list_wptr].des_0 =
+			(dma_address + (i * chunk));
+
+		/* last packet */
+		if (packet_len <= chunk)
+			ep->dma_desc_list[ep->dma_desc_list_wptr].des_1 =
+				packet_len | VHUB_DSC1_IN_INTERRUPT;
+		else
+			ep->dma_desc_list[ep->dma_desc_list_wptr].des_1 =
+				chunk;
+
+		EP_DBG("wptr:%d, req:%x, dma_desc_list 0x%x 0x%x\n",
+		       ep->dma_desc_list_wptr, (u32)req,
+		       ep->dma_desc_list[ep->dma_desc_list_wptr].des_0,
+		       ep->dma_desc_list[ep->dma_desc_list_wptr].des_1);
+
+		if (i == 0)
+			req->saved_dma_wptr = ep->dma_desc_list_wptr;
+
+		ep->dma_desc_list_wptr++;
+		i++;
+		if (ep->dma_desc_list_wptr >= AST_EP_NUM_OF_DESC)
+			ep->dma_desc_list_wptr = 0;
+		if (packet_len >= chunk)
+			packet_len -= chunk;
+		else
+			break;
+	}
+
+	if (req->req.zero)
+		pr_info("TODO: Send an extra zero length packet\n");
+
+	return 0;
+}
+
+static void aspeed_udc_ep_dma_desc_mode(struct aspeed_udc_ep *ep,
+					struct aspeed_udc_request *req)
+{
+	u32 max_req_size;
+	u32 dma_conf;
+	u32 tx_len;
+	int ret;
+
+	max_req_size = ep->chunk_max * (AST_EP_NUM_OF_DESC - 1);
+
+	if ((req->req.length - req->req.actual) > max_req_size)
+		tx_len = max_req_size;
+	else
+		tx_len = req->req.length - req->req.actual;
+
+	EP_DBG("%s: req(0x%x) dma:0x%x, len:0x%x, actual:0x%x, %s:%d, %s:%x\n",
+	       ep->ep.name, (u32)req, req->req.dma, req->req.length,
+	       req->req.actual, "tx_len", tx_len,
+	       "dir", ep->ep_dir);
+
+	if ((req->req.dma % 4) != 0) {
+		pr_err("Not supported=> 1: %s : %x len (%d/%d) dir %x\n",
+		       ep->ep.name, req->req.dma, req->req.actual,
+		       req->req.length, ep->ep_dir);
+	} else {
+		writel(EP_RESET_DESC_OP, ep->ep_base + AST_EP_DMA_CTRL);
+		ret = aspeed_dma_descriptor_setup(ep, req->req.dma +
+						  req->req.actual,
+						  tx_len, req);
+		if (!ret)
+			req->actual_dma_length += tx_len;
+
+		writel(ep->dma_desc_dma_handle, ep->ep_base + AST_EP_DMA_BUFF);
+		dma_conf = EP_DESC_OP_ENABLE;
+		if (ep->ep_dir)
+			dma_conf |= EP_DMA_IN_LONG_MODE;
+		writel(dma_conf, ep->ep_base + AST_EP_DMA_CTRL);
+
+		writel(ep->dma_desc_list_wptr,
+		       ep->ep_base + AST_EP_DMA_STS);
+	}
+}
+
+static void aspeed_udc_ep_dma(struct aspeed_udc_ep *ep,
+			      struct aspeed_udc_request *req)
+{
+	u16 tx_len;
+
+	if ((req->req.length - req->req.actual) > ep->ep.maxpacket)
+		tx_len = ep->ep.maxpacket;
+	else
+		tx_len = req->req.length - req->req.actual;
+
+	EP_DBG("req(0x%x) dma: 0x%x, length: 0x%x, actual: 0x%x\n",
+	       (u32)req, req->req.dma, req->req.length, req->req.actual);
+
+	EP_DBG("%s: len: %d, dir(0x%x): %s\n",
+	       ep->ep.name, tx_len, ep->ep_dir,
+	       ep->ep_dir ? "IN" : "OUT");
+
+	writel(req->req.dma + req->req.actual, ep->ep_base + AST_EP_DMA_BUFF);
+	writel(AST_EP_TX_DATA_BYTE(tx_len), ep->ep_base + AST_EP_DMA_STS);
+	writel(AST_EP_TX_DATA_BYTE(tx_len) | AST_EP_START_TRANS,
+	       ep->ep_base + AST_EP_DMA_STS);
+}
+
+static int aspeed_udc_ep_enable(struct usb_ep *_ep,
+				const struct usb_endpoint_descriptor *desc)
+{
+	struct aspeed_udc_ep *ep = container_of(_ep, struct aspeed_udc_ep, ep);
+	u16 nr_trans = ((usb_endpoint_maxp(desc) >> 11) & 3) + 1;
+	u16 maxpacket = usb_endpoint_maxp(desc) & 0x7ff;
+	u8 epnum = usb_endpoint_num(desc);
+	u32 ep_conf = 0;
+	u8 dir_in;
+	u8 type;
+
+	EP_DBG("%s, set ep #%d, maxpacket %d ,wmax %d trans:%d\n", ep->ep.name,
+	       epnum, maxpacket, le16_to_cpu(desc->wMaxPacketSize), nr_trans);
+
+	if (!_ep || !ep || !desc || desc->bDescriptorType != USB_DT_ENDPOINT) {
+		pr_err("bad ep or descriptor %s %d, %s: %d, %s: %d\n",
+		       _ep->name, desc->bDescriptorType,
+		       "maxpacket", maxpacket,
+		       "ep maxpacket", ep->ep.maxpacket);
+		return -EINVAL;
+	}
+
+	ep->ep.desc = desc;
+	ep->stopped = 0;
+	ep->ep.maxpacket = maxpacket;
+
+	if (maxpacket > 1024) {
+		pr_err("maxpacket is out-of-range: 0x%x\n", maxpacket);
+		maxpacket = 1024;
+	}
+
+	if (maxpacket == 1024)
+		ep_conf = 0;
+	else
+		ep_conf = EP_SET_MAX_PKT(maxpacket);
+
+	ep_conf |= EP_SET_EP_NUM(epnum);
+
+	type = usb_endpoint_type(desc);
+	dir_in = usb_endpoint_dir_in(desc);
+	ep->ep_dir = dir_in;
+
+	ep->chunk_max = ep->ep.maxpacket;
+	if (ep->ep_dir) {
+		ep->chunk_max <<= 3;
+		while (ep->chunk_max > 4095)
+			ep->chunk_max -= ep->ep.maxpacket;
+	}
+
+	EP_DBG("epnum %d, type %d, dir_in %d\n", epnum, type, dir_in);
+	switch (type) {
+	case USB_ENDPOINT_XFER_ISOC:
+		if (dir_in)
+			ep_conf |= EP_TYPE_ISO_IN;
+		else
+			ep_conf |= EP_TYPE_ISO_OUT;
+		break;
+	case USB_ENDPOINT_XFER_BULK:
+		if (dir_in)
+			ep_conf |= EP_TYPE_BULK_IN;
+		else
+			ep_conf |= EP_TYPE_BULK_OUT;
+		break;
+	case USB_ENDPOINT_XFER_INT:
+		if (dir_in)
+			ep_conf |= EP_TYPE_INT_IN;
+		else
+			ep_conf |= EP_TYPE_INT_OUT;
+		break;
+	}
+
+	writel(EP_RESET_DESC_OP, ep->ep_base + AST_EP_DMA_CTRL);
+	writel(EP_SINGLE_DESC_MODE, ep->ep_base + AST_EP_DMA_CTRL);
+	writel(0, ep->ep_base + AST_EP_DMA_STS);
+
+	writel(ep_conf | EP_ENABLE, ep->ep_base + AST_EP_CONFIG);
+
+	EP_DBG("read ep %d seting: 0x%08X\n", epnum,
+	       readl(ep->ep_base + AST_EP_CONFIG));
+
+	return 0;
+}
+
+static int aspeed_udc_ep_disable(struct usb_ep *_ep)
+{
+	struct aspeed_udc_ep *ep = container_of(_ep, struct aspeed_udc_ep, ep);
+
+	EP_DBG("%s\n", _ep->name);
+
+	ep->ep.desc = NULL;
+	ep->stopped = 1;
+	writel(0, ep->ep_base + AST_EP_CONFIG);
+
+	return 0;
+}
+
+static struct usb_request *aspeed_udc_ep_alloc_request(struct usb_ep *_ep,
+						       gfp_t gfp_flags)
+{
+	struct aspeed_udc_request *req;
+
+	EP_DBG("%s\n", _ep->name);
+	req = kzalloc(sizeof(*req), gfp_flags);
+	if (!req)
+		return NULL;
+
+	INIT_LIST_HEAD(&req->queue);
+	return &req->req;
+}
+
+static void aspeed_udc_ep_free_request(struct usb_ep *_ep,
+				       struct usb_request *_req)
+{
+	struct aspeed_udc_request *req;
+
+	EP_DBG("%s\n", _ep->name);
+	req = container_of(_req, struct aspeed_udc_request, req);
+	kfree(req);
+}
+
+static int aspeed_udc_ep_queue(struct usb_ep *_ep, struct usb_request *_req,
+			       gfp_t gfp_flags)
+{
+	struct aspeed_udc_request *req = req_to_aspeed_udc_req(_req);
+	struct aspeed_udc_ep *ep = ep_to_aspeed_udc_ep(_ep);
+	struct aspeed_udc_priv *udc = ep->udc;
+	unsigned long flags = 0;
+
+	if (unlikely(!_req || !_req->complete || !_req->buf || !_ep))
+		return -EINVAL;
+
+	if (ep->stopped) {
+		pr_err("%s : is stop\n", _ep->name);
+		return -1;
+	}
+
+	spin_lock_irqsave(&udc->lock, flags);
+
+	list_add_tail(&req->queue, &ep->queue);
+
+	req->actual_dma_length = 0;
+	req->req.actual = 0;
+	req->req.status = -EINPROGRESS;
+
+	if (usb_gadget_map_request(&udc->gadget, &req->req, ep->ep_dir)) {
+		pr_err("Map request failed\n");
+		return -1;
+	}
+
+	EP_DBG("%s: req(0x%x) dma:0x%x, len:%d, actual:0x%x\n",
+	       ep->name, (u32)req, req->req.dma,
+	       req->req.length, req->req.actual);
+
+	if (!ep->ep.desc) { /* ep0 */
+		if ((req->req.dma % 4) != 0) {
+			pr_err("ep0 request dma is not 4 bytes align\n");
+			return -1;
+		}
+		aspeed_udc_ep0_queue(ep, req);
+
+	} else {
+		if (list_is_singular(&ep->queue)) {
+			if (udc->desc_mode)
+				aspeed_udc_ep_dma_desc_mode(ep, req);
+			else
+				aspeed_udc_ep_dma(ep, req);
+		}
+	}
+
+	spin_unlock_irqrestore(&udc->lock, flags);
+
+	return 0;
+}
+
+static int aspeed_udc_ep_dequeue(struct usb_ep *_ep, struct usb_request *_req)
+{
+	struct aspeed_udc_ep *ep = ep_to_aspeed_udc_ep(_ep);
+	struct aspeed_udc_request *req;
+
+	EP_DBG("%s\n", _ep->name);
+
+	if (!_ep)
+		return -EINVAL;
+
+	list_for_each_entry(req, &ep->queue, queue) {
+		if (&req->req == _req) {
+			list_del_init(&req->queue);
+			_req->status = -ECONNRESET;
+			break;
+		}
+	}
+	if (&req->req != _req) {
+		pr_err("Cannot find REQ in ep queue\n");
+		return -EINVAL;
+	}
+
+	aspeed_udc_done(ep, req, -ESHUTDOWN);
+
+	return 0;
+}
+
+static int aspeed_udc_ep_set_halt(struct usb_ep *_ep, int value)
+{
+	struct aspeed_udc_ep *ep = ep_to_aspeed_udc_ep(_ep);
+	struct aspeed_udc_priv *udc = ep->udc;
+	u32 reg;
+	u32 val;
+
+	EP_DBG("%s: %d\n", _ep->name, value);
+	if (!_ep)
+		return -EINVAL;
+
+	if (!strncmp(_ep->name, "ep0", 3)) {
+		reg = udc->udc_base + AST_VHUB_EP0_CTRL;
+		if (value)
+			val = readl(reg) | EP0_STALL;
+		else
+			val = readl(reg) & ~EP0_STALL;
+
+	} else {
+		reg = ep->ep_base + AST_EP_CONFIG;
+		if (value)
+			val = readl(reg) | EP_SET_EP_STALL;
+		else
+			val = readl(reg) & ~EP_SET_EP_STALL;
+
+		ep->stopped = value ? 1 : 0;
+	}
+
+	writel(val, reg);
+
+	return 0;
+}
+
+static void aspeed_udc_ep_handle_desc_mode(struct aspeed_udc_priv *udc,
+					   u16 ep_num)
+{
+	struct aspeed_udc_ep *ep = &udc->ep[ep_num];
+	struct aspeed_udc_request *req;
+	u32 processing_status;
+	u32 wr_ptr, rd_ptr;
+	u16 total_len = 0;
+	u16 len_in_desc;
+	u16 len;
+	int i;
+
+	if (list_empty(&ep->queue)) {
+		pr_err("%s ep req queue is empty!!!\n", ep->ep.name);
+		return;
+	}
+
+	EP_DBG("%s handle\n", ep->ep.name);
+
+	req = list_first_entry(&ep->queue, struct aspeed_udc_request, queue);
+
+	processing_status = (readl(ep->ep_base + AST_EP_DMA_CTRL) >> 4) & 0xf;
+	if (processing_status != 0 && processing_status != 8) {
+		pr_err("Desc process status: 0x%x\n", processing_status);
+		return;
+	}
+
+	rd_ptr = (readl(ep->ep_base + AST_EP_DMA_STS) >> 8) & 0xFF;
+	wr_ptr = (readl(ep->ep_base + AST_EP_DMA_STS)) & 0xFF;
+
+	EP_DBG("req(0x%x) length: 0x%x, actual: 0x%x, rd_ptr:%d, wr_ptr:%d\n",
+	       (u32)req, req->req.length, req->req.actual, rd_ptr, wr_ptr);
+
+	if (rd_ptr != wr_ptr) {
+		pr_err("%s: Desc is not empy. %s:%d,  %s:%d\n",
+		       __func__, "rd_ptr", rd_ptr, "wr_ptr", wr_ptr);
+		return;
+	}
+
+	i = req->saved_dma_wptr;
+	do {
+		if (ep->ep_dir)
+			len_in_desc =
+				VHUB_DSC1_IN_LEN(ep->dma_desc_list[i].des_1);
+		else
+			len_in_desc =
+				VHUB_DSC1_OUT_LEN(ep->dma_desc_list[i].des_1);
+		total_len += len_in_desc;
+		i++;
+		if (i >= AST_EP_NUM_OF_DESC)
+			i = 0;
+	} while (i != wr_ptr);
+
+	len = total_len;
+	req->req.actual += len;
+
+	EP_DBG("%s: total transfer len:0x%x\n", ep->ep.name, len);
+
+	if (req->req.length <= req->req.actual || len < ep->ep.maxpacket) {
+		usb_gadget_unmap_request(&udc->gadget, &req->req, ep->ep_dir);
+		if ((req->req.dma % 4) != 0) {
+			pr_err("Not supported in desc_mode\n");
+			return;
+		}
+
+		aspeed_udc_done(ep, req, 0);
+
+		if (!list_empty(&ep->queue)) {
+			req = list_first_entry(&ep->queue,
+					       struct aspeed_udc_request,
+					       queue);
+
+			EP_DBG("%s: next req(0x%x) dma 0x%x\n", ep->ep.name,
+			       (u32)req, req->req.dma);
+
+			if (req->actual_dma_length == req->req.actual)
+				aspeed_udc_ep_dma_desc_mode(ep, req);
+			else
+				EP_DBG("%s: skip req(0x%x) dma(%d %d)\n",
+				       ep->ep.name, (u32)req,
+				       req->actual_dma_length,
+				       req->req.actual);
+		}
+
+	} else {
+		EP_DBG("%s: not done, keep trigger dma\n", ep->ep.name);
+		if (req->actual_dma_length == req->req.actual)
+			aspeed_udc_ep_dma_desc_mode(ep, req);
+		else
+			EP_DBG("%s: skip req(0x%x) dma (%d %d)\n",
+			       ep->ep.name, (u32)req,
+			       req->actual_dma_length,
+			       req->req.actual);
+	}
+
+	EP_DBG("%s exits\n", ep->ep.name);
+}
+
+static void aspeed_udc_ep_handle(struct aspeed_udc_priv *udc, u16 ep_num)
+{
+	struct aspeed_udc_ep *ep = &udc->ep[ep_num];
+	struct aspeed_udc_request *req;
+	u16 len = 0;
+
+	EP_DBG("%s handle\n", ep->ep.name);
+
+	if (list_empty(&ep->queue))
+		return;
+
+	req = list_first_entry(&ep->queue, struct aspeed_udc_request, queue);
+	len = (readl(ep->ep_base + AST_EP_DMA_STS) >> 16) & 0x7ff;
+
+	EP_DBG("%s req: length: 0x%x, actual: 0x%x, len: 0x%x\n",
+	       ep->ep.name, req->req.length, req->req.actual, len);
+
+	req->req.actual += len;
+
+	if (req->req.length == req->req.actual || len < ep->ep.maxpacket) {
+		usb_gadget_unmap_request(&udc->gadget, &req->req, ep->ep_dir);
+
+		aspeed_udc_done(ep, req, 0);
+		if (!list_empty(&ep->queue)) {
+			req = list_first_entry(&ep->queue,
+					       struct aspeed_udc_request,
+					       queue);
+			aspeed_udc_ep_dma(ep, req);
+		}
+
+	} else {
+		aspeed_udc_ep_dma(ep, req);
+	}
+}
+
+static void aspeed_udc_isr(struct aspeed_udc_priv *udc)
+{
+	u32 base = udc->udc_base;
+	u32 isr = readl(base + AST_VHUB_ISR);
 	u32 ep_isr;
 	int i;
 
+	isr &= 0x3ffff;
 	if (!isr)
 		return;
 
+//	pr_info("%s: isr: 0x%x\n", __func__, isr);
 	if (isr & ISR_BUS_RESET) {
-		usbdbg("ISR_BUS_RESET");
-		ast_udc_write(ISR_BUS_RESET, AST_VHUB_ISR);
-		usbd_device_event_irq(udc_device, DEVICE_RESET, 0);
+		UDC_DBG("ISR_BUS_RESET\n");
+		writel(ISR_BUS_RESET, base + AST_VHUB_ISR);
 	}
 
 	if (isr & ISR_BUS_SUSPEND) {
-		usbdbg("ISR_BUS_SUSPEND");
-		ast_udc_write(ISR_BUS_SUSPEND, AST_VHUB_ISR);
-		usbd_device_event_irq(udc_device, DEVICE_BUS_INACTIVE, 0);
+		UDC_DBG("ISR_BUS_SUSPEND\n");
+		writel(ISR_BUS_SUSPEND, base + AST_VHUB_ISR);
 	}
 
 	if (isr & ISR_SUSPEND_RESUME) {
-		usbdbg("ISR_SUSPEND_RESUME");
-		ast_udc_write(ISR_SUSPEND_RESUME, AST_VHUB_ISR);
-		usbd_device_event_irq(udc_device, DEVICE_BUS_ACTIVITY, 0);
+		UDC_DBG("ISR_SUSPEND_RESUME\n");
+		writel(ISR_SUSPEND_RESUME, base + AST_VHUB_ISR);
 	}
 
 	if (isr & ISR_HUB_EP0_IN_ACK_STALL) {
-//		usbdbg("ISR_HUB_EP0_IN_ACK_STALL");
-		ast_udc_write(ISR_HUB_EP0_IN_ACK_STALL, AST_VHUB_ISR);
-		ast_udc_ep0_in(udc_device->bus->endpoint_array);
+		UDC_DBG("ISR_HUB_EP0_IN_ACK_STALL\n");
+		writel(ISR_HUB_EP0_IN_ACK_STALL, base + AST_VHUB_ISR);
+		aspeed_udc_ep0_in(udc);
 	}
 
 	if (isr & ISR_HUB_EP0_OUT_ACK_STALL) {
-//		usbdbg("ISR_HUB_EP0_OUT_ACK_STALL");
-		ast_udc_write(ISR_HUB_EP0_OUT_ACK_STALL, AST_VHUB_ISR);
-		ast_udc_ep0_out(udc_device->bus->endpoint_array);
+		UDC_DBG("ISR_HUB_EP0_OUT_ACK_STALL\n");
+		writel(ISR_HUB_EP0_OUT_ACK_STALL, base + AST_VHUB_ISR);
+		aspeed_udc_ep0_out(udc);
 	}
 
 	if (isr & ISR_HUB_EP0_OUT_NAK) {
-//		usbdbg("ISR_HUB_EP0_OUT_NAK");
-		ast_udc_write(ISR_HUB_EP0_OUT_NAK, AST_VHUB_ISR);
+		UDC_DBG("ISR_HUB_EP0_OUT_NAK\n");
+		writel(ISR_HUB_EP0_OUT_NAK, base + AST_VHUB_ISR);
 	}
 
 	if (isr & ISR_HUB_EP0_IN_DATA_NAK) {
-//		usbdbg("ISR_HUB_EP0_IN_DATA_ACK");
-		ast_udc_write(ISR_HUB_EP0_IN_DATA_NAK, AST_VHUB_ISR);
+		UDC_DBG("ISR_HUB_EP0_IN_DATA_NAK\n");
+		writel(ISR_HUB_EP0_IN_DATA_NAK, base + AST_VHUB_ISR);
 	}
 
 	if (isr & ISR_HUB_EP0_SETUP) {
-		usbdbg("SETUP");
-		ast_udc_write(ISR_HUB_EP0_SETUP, AST_VHUB_ISR);
-		ast_udc_setup_handle(udc_device->bus->endpoint_array);
+		UDC_DBG("SETUP\n");
+		writel(ISR_HUB_EP0_SETUP, base + AST_VHUB_ISR);
+		aspeed_udc_setup_handle(udc);
 	}
 
 	if (isr & ISR_HUB_EP1_IN_DATA_ACK) {
 		// HUB Bitmap control
-		usberr("Error: EP1 IN ACK");
-		ast_udc_write(ISR_HUB_EP1_IN_DATA_ACK, AST_VHUB_ISR);
-		ast_udc_write(0x00, AST_VHUB_EP1_STS_CHG);
+		pr_err("Error: EP1 IN ACK\n");
+		writel(ISR_HUB_EP1_IN_DATA_ACK, base + AST_VHUB_ISR);
+		writel(0x00, base + AST_VHUB_EP1_STS_CHG);
 	}
 
-	if (isr & ISR_DEVICE1)
-		usberr("ISR_DEVICE1");
-
-	if (isr & ISR_DEVICE2)
-		usberr("ISR_DEVICE2");
-
-	if (isr & ISR_DEVICE3)
-		usberr("ISR_DEVICE3");
-
-	if (isr & ISR_DEVICE4)
-		usberr("ISR_DEVICE4");
-
-	if (isr & ISR_DEVICE5)
-		usberr("ISR_DEVICE5");
-
-	if (isr & ISR_DEVICE6)
-		usberr("ISR_DEVICE6");
-
-	if (isr & ISR_DEVICE7)
-		usberr("ISR_DEVICE7");
-
 	if (isr & ISR_EP_ACK_STALL) {
-//		usbdbg("ISR_EP_ACK_STALL");
-		ep_isr = ast_udc_read(AST_VHUB_EP_ACK_ISR);
+		ep_isr = readl(base + AST_VHUB_EP_ACK_ISR);
+		UDC_DBG("ISR_EP_ACK_STALL, ep_ack_isr: 0x%x\n", ep_isr);
+
 		for (i = 0; i < UDC_MAX_ENDPOINTS; i++) {
 			if (ep_isr & (0x1 << i)) {
-				ast_udc_write(BIT(i), AST_VHUB_EP_ACK_ISR);
-				ast_udc_ep_handle(udc_device->bus->endpoint_array + i + 1);
+				writel(BIT(i), base + AST_VHUB_EP_ACK_ISR);
+				if (udc->desc_mode)
+					aspeed_udc_ep_handle_desc_mode(udc, i);
+				else
+					aspeed_udc_ep_handle(udc, i);
 			}
 		}
 	}
 
 	if (isr & ISR_EP_NAK) {
-		usbdbg("ISR_EP_NAK");
-		ast_udc_write(ISR_EP_NAK, AST_VHUB_ISR);
+		UDC_DBG("ISR_EP_NAK\n");
+		writel(ISR_EP_NAK, base + AST_VHUB_ISR);
 	}
+}
+
+static const struct usb_ep_ops aspeed_udc_ep_ops = {
+	.enable = aspeed_udc_ep_enable,
+	.disable = aspeed_udc_ep_disable,
+	.alloc_request = aspeed_udc_ep_alloc_request,
+	.free_request = aspeed_udc_ep_free_request,
+	.queue = aspeed_udc_ep_queue,
+	.dequeue = aspeed_udc_ep_dequeue,
+	.set_halt = aspeed_udc_ep_set_halt,
+};
+
+static void aspeed_udc_ep_init(struct aspeed_udc_priv *udc)
+{
+	struct aspeed_udc_ep *ep;
+	int i;
+
+	for (i = 0; i < UDC_MAX_ENDPOINTS; i++) {
+		ep = &udc->ep[i];
+		snprintf(ep->name, sizeof(ep->name), "ep%d", i);
+		ep->ep.name = ep->name;
+		ep->ep.ops = &aspeed_udc_ep_ops;
+
+		if (i) {
+			ep->ep_buf = udc->ep0_ctrl_buf + (i * EP_DMA_SIZE);
+			ep->ep_dma = udc->ep0_ctrl_dma + (i * EP_DMA_SIZE);
+			usb_ep_set_maxpacket_limit(&ep->ep, 1024);
+			list_add_tail(&ep->ep.ep_list, &udc->gadget.ep_list);
+
+			/* allocate endpoint descrptor list (Note: must be DMA memory) */
+			if (udc->desc_mode) {
+				ep->dma_desc_list =
+					dma_alloc_coherent(AST_EP_NUM_OF_DESC *
+						sizeof(struct aspeed_ep_desc),
+						(unsigned long *)
+						&ep->dma_desc_dma_handle
+						);
+				ep->dma_desc_list_wptr = 0;
+			}
+
+		} else {
+			usb_ep_set_maxpacket_limit(&ep->ep, 64);
+		}
+
+		ep->ep_base = udc->udc_base + AST_EP_BASE + (AST_EP_OFFSET * i);
+		ep->udc = udc;
+
+		INIT_LIST_HEAD(&ep->queue);
+	}
+}
+
+static int aspeed_gadget_getframe(struct usb_gadget *gadget)
+{
+	struct aspeed_udc_priv *udc = gadget_to_aspeed_udc(gadget);
+
+	return (readl(udc->udc_base + AST_VHUB_USB_STS) >> 16) & 0x7ff;
+}
+
+static int aspeed_gadget_wakeup(struct usb_gadget *gadget)
+{
+	UDC_DBG("TODO\n");
+	return 0;
 }
 
 /*
- * udc_unset_nak
- *
- * Suspend sending of NAK tokens for DATA OUT tokens on a given endpoint.
- * Switch off NAKing on this endpoint to accept more data output from host.
+ * activate/deactivate link with host; minimize power usage for
+ * inactive links by cutting clocks and transceiver power.
  */
-void udc_unset_nak(int ep_num)
+static int aspeed_gadget_pullup(struct usb_gadget *gadget, int is_on)
 {
-/* Do nothing */
-}
+	struct aspeed_udc_priv *udc = gadget_to_aspeed_udc(gadget);
+	u32 reg = udc->udc_base + AST_VHUB_CTRL;
 
-/*
- * udc_set_nak
- *
- * Allow upper layers to signal lower layers should not accept more RX data
- */
-void udc_set_nak(int ep_num)
-{
-/* Do nothing */
-}
+	UDC_DBG("is_on: %d\n", is_on);
 
-/* Associate a physical endpoint with endpoint instance */
-void udc_setup_ep(struct usb_device_instance *device, unsigned int id,
-		  struct usb_endpoint_instance *endpoint)
-{
-	int ep_num, ep_addr, ep_isout, ep_type, ep_size;
-	u32 ep_conf;
-	u32 ep_reg;
-
-	usbdbg("setting up endpoint id: %d", id);
-
-	if (!endpoint) {
-		usberr("Error: invalid endpoint");
-		return;
-	}
-
-	ep_num = endpoint->endpoint_address & USB_ENDPOINT_NUMBER_MASK;
-	if (ep_num >= UDC_MAX_ENDPOINTS) {
-		usberr("Error: ep num is out-of-range %d", ep_num);
-		return;
-	}
-
-	if (ep_num == 0) {
-		/* Done for ep0 */
-		return;
-	}
-
-	ep_addr = endpoint->endpoint_address;
-	ep_isout = (ep_addr & USB_ENDPOINT_DIR_MASK) == USB_DIR_OUT;
-	ep_type = ep_isout ? endpoint->rcv_attributes : endpoint->tx_attributes;
-	ep_size = ep_isout ? endpoint->rcv_packetSize : endpoint->tx_packetSize;
-
-	usbdbg("addr %x, num %d, dir %s, type %s, packet size %d",
-	       ep_addr, ep_num,
-	       ep_isout ? "out" : "in",
-	       ep_type == USB_ENDPOINT_XFER_ISOC ? "isoc" :
-	       ep_type == USB_ENDPOINT_XFER_BULK ? "bulk" :
-	       ep_type == USB_ENDPOINT_XFER_INT ? "int" : "???",
-	       ep_size);
-
-	/* Configure EP */
-	if (ep_size == 1024)
-		ep_conf = 0;
+	if (is_on)
+		writel(readl(reg) | ROOT_UPSTREAM_EN, reg);
 	else
-		ep_conf = EP_SET_MAX_PKT(ep_size);
+		writel(readl(reg) & ~ROOT_UPSTREAM_EN, reg);
 
-	ep_conf |= EP_SET_EP_NUM(ep_num);
-
-	switch (ep_type) {
-	case USB_ENDPOINT_XFER_ISOC:
-		if (ep_isout)
-			ep_conf |= EP_TYPE_ISO_OUT;
-		else
-			ep_conf |= EP_TYPE_ISO_IN;
-		break;
-	case USB_ENDPOINT_XFER_BULK:
-		if (ep_isout)
-			ep_conf |= EP_TYPE_BULK_OUT;
-		else
-			ep_conf |= EP_TYPE_BULK_IN;
-		break;
-	case USB_ENDPOINT_XFER_INT:
-		if (ep_isout)
-			ep_conf |= EP_TYPE_INT_OUT;
-		else
-			ep_conf |= EP_TYPE_INT_IN;
-		break;
-	}
-
-	ep_reg = aspeed_udc->udc_base + AST_EP_BASE + (AST_EP_OFFSET * (ep_num - 1));
-
-	ast_ep_write(ep_reg, EP_SINGLE_DESC_MODE, AST_EP_DMA_CTRL);
-	ast_ep_write(ep_reg, 0, AST_EP_DMA_STS);
-	ast_ep_write(ep_reg, ep_conf | EP_ENABLE, AST_EP_CONFIG);
-
-	//also setup dma
-	if (ep_isout) {
-		ast_ep_write(ep_reg, endpoint->rcv_urb->buffer, AST_EP_DMA_BUFF);
-		ast_ep_write(ep_reg, AST_EP_START_TRANS, AST_EP_DMA_STS);
-
-	} else {
-		ast_ep_write(ep_reg, endpoint->tx_urb->buffer, AST_EP_DMA_BUFF);
-	}
+	return 0;
 }
 
-/* Connect the USB device to the bus */
-void udc_connect(void)
+static int aspeed_gadget_start(struct usb_gadget *gadget,
+			       struct usb_gadget_driver *driver)
 {
-	usbdbg("UDC connect");
-	ast_udc_write(ast_udc_read(AST_VHUB_CTRL) | ROOT_UPSTREAM_EN,
-		      AST_VHUB_CTRL);
+	struct aspeed_udc_priv *udc = gadget_to_aspeed_udc(gadget);
+
+	if (!udc)
+		return -ENODEV;
+
+	udc->gadget_driver = driver;
+
+	return 0;
 }
 
-/* Disconnect the USB device to the bus */
-void udc_disconnect(void)
+static int aspeed_gadget_stop(struct usb_gadget *gadget)
 {
-	usbdbg("UDC disconnect");
-	ast_udc_write(ast_udc_read(AST_VHUB_CTRL) & ~ROOT_UPSTREAM_EN,
-		      AST_VHUB_CTRL);
+	struct aspeed_udc_priv *udc = gadget_to_aspeed_udc(gadget);
+	u32 reg = udc->udc_base + AST_VHUB_CTRL;
+
+	writel(readl(reg) & ~ROOT_UPSTREAM_EN, reg);
+
+	udc->gadget.speed = USB_SPEED_UNKNOWN;
+	udc->gadget_driver = NULL;
+
+	usb_gadget_set_state(&udc->gadget, USB_STATE_NOTATTACHED);
+
+	return 0;
 }
 
-void udc_enable(struct usb_device_instance *device)
-{
-	usbdbg("enable UDC");
+static const struct usb_gadget_ops aspeed_gadget_ops = {
+	.get_frame		= aspeed_gadget_getframe,
+	.wakeup			= aspeed_gadget_wakeup,
+	.pullup			= aspeed_gadget_pullup,
+	.udc_start		= aspeed_gadget_start,
+	.udc_stop		= aspeed_gadget_stop,
+};
 
-	udc_device = device;
-	if (!ep0_urb)
-		ep0_urb = usbd_alloc_urb(udc_device,
-					 udc_device->bus->endpoint_array);
-	else
-		usbinfo("ep0_urb %p already allocated", ep0_urb);
+int dm_usb_gadget_handle_interrupts(struct udevice *dev)
+{
+	struct aspeed_udc_priv *udc = dev_get_priv(dev);
+
+	aspeed_udc_isr(udc);
+
+	return 0;
 }
 
-void udc_disable(void)
+static int udc_init(struct aspeed_udc_priv *udc)
 {
-	usbdbg("disable UDC");
+	u32 base;
 
-	/* Free ep0 URB */
-	if (ep0_urb) {
-		usbd_dealloc_urb(ep0_urb);
-		ep0_urb = NULL;
-	}
-
-	/* Reset device pointer */
-	udc_device = NULL;
-}
-
-/* Allow udc code to do any additional startup */
-void udc_startup_events(struct usb_device_instance *device)
-{
-	usbdbg("udc_startup_events");
-
-	/* The DEVICE_INIT event puts the USB device in the state STATE_INIT */
-	usbd_device_event_irq(device, DEVICE_INIT, 0);
-
-	/* The DEVICE_CREATE event puts the USB device in the state
-	 * STATE_ATTACHED
-	 */
-	usbd_device_event_irq(device, DEVICE_CREATE, 0);
-
-	udc_enable(device);
-}
-
-int udc_init(void)
-{
-	usbdbg("udc_init");
-
-	if (!aspeed_udc) {
-		usberr("Error: udc driver is not init yet");
+	if (!udc) {
+		dev_err(udc->dev, "Error: udc driver is not init yet");
 		return -1;
 	}
 
-	// Disable PHY reset
-	ast_udc_write(ROOT_PHY_CLK_EN | ROOT_PHY_RESET_DIS, AST_VHUB_CTRL);
+	base = udc->udc_base;
 
-	ast_udc_write(0, AST_VHUB_DEV_RESET);
+	writel(ROOT_PHY_CLK_EN | ROOT_PHY_RESET_DIS, base + AST_VHUB_CTRL);
 
-	ast_udc_write(~BIT(18), AST_VHUB_ISR);
-	ast_udc_write(~BIT(18), AST_VHUB_IER);
+	writel(0, base + AST_VHUB_DEV_RESET);
 
-	ast_udc_write(~BIT(UDC_MAX_ENDPOINTS), AST_VHUB_EP_ACK_ISR);
-	ast_udc_write(~BIT(UDC_MAX_ENDPOINTS), AST_VHUB_EP_ACK_IER);
+	writel(~BIT(18), base + AST_VHUB_ISR);
+	writel(~BIT(18), base + AST_VHUB_IER);
 
-	ast_udc_write(0, AST_VHUB_EP0_CTRL);
-	ast_udc_write(0, AST_VHUB_EP1_CTRL);
+	writel(~BIT(UDC_MAX_ENDPOINTS), base + AST_VHUB_EP_ACK_ISR);
+	writel(~BIT(UDC_MAX_ENDPOINTS), base + AST_VHUB_EP_ACK_IER);
+
+	writel(0, base + AST_VHUB_EP0_CTRL);
+	writel(0, base + AST_VHUB_EP1_CTRL);
+
+#ifdef AST_EP_DESC_MODE
+	if (AST_EP_NUM_OF_DESC == 256)
+		writel(readl(base + AST_VHUB_CTRL) | EP_LONG_DESC_MODE,
+		       base + AST_VHUB_CTRL);
+#endif
 
 	return 0;
 }
@@ -738,9 +1170,11 @@ static int aspeed_udc_probe(struct udevice *dev)
 	struct reset_ctl udc_reset_ctl;
 	int ret;
 
+	dev_info(dev, "Start aspeed udc...\n");
+
 	ret = reset_get_by_index(dev, 0, &udc_reset_ctl);
 	if (ret) {
-		printf("%s: Failed to get udc reset signal\n", __func__);
+		dev_err(dev, "%s: Failed to get udc reset signal\n", __func__);
 		return ret;
 	}
 
@@ -751,16 +1185,75 @@ static int aspeed_udc_probe(struct udevice *dev)
 	reset_deassert(&udc_reset_ctl);
 
 	udc->init = 1;
+	ret = udc_init(udc);
+	if (ret) {
+		dev_err(dev, "%s: udc_init failed\n", __func__);
+		return -EINVAL;
+	}
+
+	udc->gadget.ops			= &aspeed_gadget_ops;
+	udc->gadget.ep0			= &udc->ep[0].ep;
+	udc->gadget.max_speed		= udc->maximum_speed;
+	udc->gadget.speed		= USB_SPEED_UNKNOWN;
+	udc->root_setup			= (struct usb_ctrlrequest *)
+					(udc->udc_base + AST_VHUB_SETUP_DATA0);
+#ifdef AST_EP_DESC_MODE
+	udc->desc_mode			= 1;
+#else
+	udc->desc_mode			= 0;
+#endif
+	pr_info("%s: desc_mode: %d\n", __func__, udc->desc_mode);
+
+	/*
+	 * Allocate DMA buffers for all EP0s in one chunk,
+	 * one per port and one for the vHub itself
+	 */
+	udc->ep0_ctrl_buf =
+		dma_alloc_coherent(EP_DMA_SIZE * UDC_MAX_ENDPOINTS,
+				   (unsigned long *)&udc->ep0_ctrl_dma);
+
+	INIT_LIST_HEAD(&udc->gadget.ep_list);
+
+	aspeed_udc_ep_init(udc);
+
+	ret = usb_add_gadget_udc((struct device *)udc->dev, &udc->gadget);
+	if (ret) {
+		dev_err(udc->dev, "failed to register udc\n");
+		return ret;
+	}
 
 	return 0;
 }
 
 static int aspeed_udc_ofdata_to_platdata(struct udevice *dev)
 {
-	aspeed_udc = dev_get_priv(dev);
+	struct aspeed_udc_priv *udc = dev_get_priv(dev);
+	int node = dev_of_offset(dev);
 
-	/* Get the controller base address */
-	aspeed_udc->udc_base = (u32)devfdt_get_addr_index(dev, 0);
+	udc->udc_base = (u32)devfdt_get_addr_index(dev, 0);
+	udc->dev = dev;
+
+	udc->maximum_speed = usb_get_maximum_speed(node);
+	if (udc->maximum_speed == USB_SPEED_UNKNOWN) {
+		printf("Invalid usb maximum speed\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static int aspeed_udc_remove(struct udevice *dev)
+{
+	struct aspeed_udc_priv *udc = dev_get_priv(dev);
+
+	usb_del_gadget_udc(&udc->gadget);
+	if (udc->gadget_driver)
+		return -EBUSY;
+
+	writel(readl(udc->udc_base + AST_VHUB_CTRL) & ~ROOT_UPSTREAM_EN,
+	       udc->udc_base + AST_VHUB_CTRL);
+
+	dma_free_coherent(udc->ep0_ctrl_buf);
 
 	return 0;
 }
@@ -770,11 +1263,12 @@ static const struct udevice_id aspeed_udc_ids[] = {
 	{ }
 };
 
-U_BOOT_DRIVER(aspeed_udc) = {
-	.name			= "aspeed_udc",
-	.id			= UCLASS_MISC,
+U_BOOT_DRIVER(aspeed_udc_generic) = {
+	.name			= "aspeed_udc_generic",
+	.id			= UCLASS_USB_GADGET_GENERIC,
 	.of_match		= aspeed_udc_ids,
 	.probe			= aspeed_udc_probe,
+	.remove			= aspeed_udc_remove,
 	.ofdata_to_platdata	= aspeed_udc_ofdata_to_platdata,
 	.priv_auto_alloc_size	= sizeof(struct aspeed_udc_priv),
 };
