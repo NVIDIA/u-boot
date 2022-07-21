@@ -1,0 +1,11 @@
+dgx-a100-dp: u-boot: Sync up with OpenBMC u-boot
+
+This is OpenBMC's u-boot:
+https://github.com/openbmc/u-boot.git
+SHA: d3f8f1567e196344404901e63dc8ad8e4a90c03b
+
+Check in to be used for sync up reference, so we have the upstream u-boot
+commit history.
+
+Fixes jira https://jirasw.nvidia.com/browse/DGXOPENBMC-4688
+
