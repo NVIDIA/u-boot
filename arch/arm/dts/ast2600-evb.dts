@@ -280,9 +280,11 @@
 	status = "okay";
 };
 
+#if 0
 &h2x {
 	status = "okay";
 };
+#endif
 
 #if 0
 &fsim0 {
@@ -318,5 +320,9 @@
 };
 
 &hace {
+	status = "okay";
+};
+
+&acry {
 	status = "okay";
 };

@@ -45,6 +45,45 @@ config ASPEED_AST2600
 	  which is enabled by support of LPC and eSPI peripherals.
 endchoice
 
+config ASPEED_ALLOW_DANGEROUS_BACKDOORS
+	bool "Expose options enabling dangerous Aspeed hardware backdoors"
+	help
+	  This option exposes configuration settings that create
+	  critical security vulnerabilities by enabling dangerous
+	  hardware backdoors in Aspeed BMCs.  Enable it only if
+	  absolutely required for a specific system or for debugging
+	  during development.
+
+if ASPEED_ALLOW_DANGEROUS_BACKDOORS
+
+config ASPEED_ENABLE_SUPERIO
+	bool "Enable built-in AST2x00 Super I/O hardware"
+	depends on ASPEED_AST2400 || ASPEED_AST2500
+	help
+	  The Aspeed AST2400 and AST2500 include a built-in Super I/O
+	  device that is normally disabled; say Y here to enable it.
+
+	  WARNING: this has serious security implications: it grants
+	  the host read access to the BMC's entire address space.
+	  This should thus be left disabled unless required by a
+	  specific system.
+
+config ASPEED_ENABLE_DEBUG_UART
+	bool "Enable AST2500 hardware debug UART"
+	depends on ASPEED_AST2500
+	help
+	  The Aspeed AST2500 include a hardware-supported, UART-based
+	  debug interface that is normally disabled; say Y here to
+	  enable it.
+
+	  Note that this has security implications: the debug UART
+	  provides read/write access to the BMC's entire address
+	  space.  This should thus be left disabled on production
+	  systems, but may be useful to enable for debugging during
+	  development.
+
+endif
+
 config ASPEED_PALLADIUM
 	bool "Aspeed palladium for simulation"
 	default n
@@ -60,19 +99,6 @@ config ASPEED_SSP_RERV_MEM
 	help
 	  The size in bytes of reserve memory for ASPEED SoC SSP run.
 
-config ASPEED_LOADERS
-       bool "ASPEED custom loaders"
-       depends on SPL
-       default y
-       help
-        Enable the custom payload loading methods used by ASPEED. This is requited to
-        use ASPEED's proprietary secure boot feature.
-
-        Disable this is if you are using u-boot's common loader functionally
-        to eg. load u-boot as a FIT and use vboot.
-
-if ASPEED_LOADERS
-
 config ASPEED_SECURE_BOOT
 	bool "Support Aspeed secure boot feature"
 	depends on SPL && ASPEED_AST2600
@@ -87,6 +113,23 @@ config ASPEED_SECURE_BOOT_DEBUG
 	depends on ASPEED_SECURE_BOOT
 	help
 	  This option allows the bootm command use
+
+config ASPEED_LOADERS
+	bool "Aspeed custom loaders"
+	depends on SPL
+	default y
+	help
+	  Enable the custom payload loading methods used by ASPEED. This is requited to
+	  use ASPEED's proprietary secure boot feature.
+
+config ASPEED_DEFAULT_SPI_FREQUENCY
+	bool "Using default SPI clock frequency"
+	default n
+	help
+	  Using default SPI clock frequency during
+	  early booting up progress.
+
+if ASPEED_LOADERS
 
 config ASPEED_UBOOT_MMC_PART
 	int "U-Boot eMMC partition"
