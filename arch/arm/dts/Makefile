@@ -679,7 +679,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2400-ahe-50dc.dtb \
 	ast2400-palmetto.dtb \
 	ast2500-evb.dtb \
-	ast2500-bluesphere-nvidia.dtb \
+	ast2500-romulus.dtb \
 	ast2600a0-evb.dtb \
 	ast2600a1-evb.dtb \
 	ast2600-bletchley.dtb \
