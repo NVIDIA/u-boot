@@ -422,7 +422,7 @@ static int pcie_aspeed_probe(struct udevice *dev)
 		if (uclass_get_device_by_of_offset
 				(UCLASS_MISC, slot0_of_handle, &slot0_dev))
 			goto slot1;
-		if (aspeed_pcie_phy_link_status(slot0_dev))
+		if (aspeed_rc_bridge_link_status(slot0_dev))
 			aspeed_pcie_set_slot_power_limit(pcie, 0);
 	}
 
@@ -434,7 +434,7 @@ slot1:
 		if (uclass_get_device_by_of_offset
 				(UCLASS_MISC, slot1_of_handle, &slot1_dev))
 			goto end;
-		if (aspeed_pcie_phy_link_status(slot1_dev))
+		if (aspeed_rc_bridge_link_status(slot1_dev))
 			aspeed_pcie_set_slot_power_limit(pcie, 1);
 	}
 
