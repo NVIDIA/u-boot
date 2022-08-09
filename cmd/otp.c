@@ -1367,7 +1367,7 @@ static int otp_print_strap_info(int view)
 static void _otp_print_key(u32 header, u32 offset, u8 *data)
 {
 	const struct otpkey_type *key_info_array = info_cb.key_info;
-	struct otpkey_type key_info;
+	struct otpkey_type key_info = { .value = -1 };
 	int key_id, key_offset, key_type, key_length, exp_length;
 	int len = 0;
 	int i;
@@ -1381,7 +1381,6 @@ static void _otp_print_key(u32 header, u32 offset, u8 *data)
 	printf("\nKey[%d]:\n", offset);
 	printf("Header: %x\n", header);
 
-	key_info.value = -1;
 	for (i = 0; i < info_cb.key_info_len; i++) {
 		if (key_type == key_info_array[i].value) {
 			key_info = key_info_array[i];
