@@ -60,6 +60,11 @@ static int i2c_eeprom_std_ofdata_to_platdata(struct udevice *dev)
 
 static int i2c_eeprom_std_probe(struct udevice *dev)
 {
+	u32 offset_len;
+
+	if (dev_read_u32(dev, "offset_len", &offset_len) == 0)
+		i2c_set_chip_offset_len(dev, offset_len);
+
 	return 0;
 }
 

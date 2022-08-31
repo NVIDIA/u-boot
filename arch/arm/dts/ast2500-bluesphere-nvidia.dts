@@ -35,6 +35,7 @@
 		compatible = "st,24c128", "atmel,24c128";
 		reg = <0x50>;
 		pagesize = <64>;
+		offset_len = <2>;
 		eth2macoffset = <0xff 0x79 0xff 0xff 0xff 0xff>;
 	};
 };
