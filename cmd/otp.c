@@ -448,10 +448,10 @@ static int otp_compare(u32 otp_addr, u32 addr)
 	printf("%08X\n", buf[2]);
 	printf("%08X\n", buf[3]);
 	writel(otp_addr, OTP_ADDR); //Compare address
-	writel(buf[0], OTP_COMPARE_1); //Compare data 1
-	writel(buf[1], OTP_COMPARE_2); //Compare data 2
-	writel(buf[2], OTP_COMPARE_3); //Compare data 3
-	writel(buf[3], OTP_COMPARE_4); //Compare data 4
+	writel(~buf[0], OTP_COMPARE_1); //Compare data 1
+	writel(~buf[1], OTP_COMPARE_2); //Compare data 2
+	writel(~buf[2], OTP_COMPARE_3); //Compare data 3
+	writel(~buf[3], OTP_COMPARE_4); //Compare data 4
 	writel(0x23b1e363, OTP_COMMAND); //Compare command
 	wait_complete();
 	ret = readl(OTP_STATUS); //Compare command
