@@ -17,6 +17,8 @@
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <dt-bindings/clock/ast2600-clock.h>
+#include <linux/bitfield.h>
+#include <linux/bitops.h>
 #include "sdram_phy_ast2600.h"
 
 /* in order to speed up DRAM init time, write pre-defined values to registers
@@ -271,82 +273,84 @@ static int ast2600_sdramphy_check_status(struct dram_info *info)
 	debug("\nSDRAM PHY training report:\n");
 	/* training status */
 	value = readl(reg_base + 0x00);
-	debug("rO_DDRPHY_reg offset 0x00 = 0x%08x\n", value);
-	if (value & BIT(3)) {
+	debug("\nrO_DDRPHY_reg offset 0x00 = 0x%08x\n", value);
+	if (value & BIT(3))
 		debug("\tinitial PVT calibration fail\n");
-	}
-	if (value & BIT(5)) {
+
+	if (value & BIT(5))
 		debug("\truntime calibration fail\n");
-	}
 
 	/* PU & PD */
 	value = readl(reg_base + 0x30);
-	debug("rO_DDRPHY_reg offset 0x30 = 0x%08x\n", value);
-	debug("  PU = 0x%02x\n", value & 0xff);
-	debug("  PD = 0x%02x\n", (value >> 16) & 0xff);
+	debug("\nrO_DDRPHY_reg offset 0x30 = 0x%08x\n", value);
+	debug("  PU = 0x%02lx\n", FIELD_GET(GENMASK(7, 0), value));
+	debug("  PD = 0x%02lx\n", FIELD_GET(GENMASK(23, 16), value));
 
 	/* read eye window */
 	value = readl(reg_base + 0x68);
-	if (0 == (value & GENMASK(7, 0))) {
+	if (FIELD_GET(GENMASK(7, 0), value) == 0)
 		need_retrain = 1;
-	}
 
-	debug("rO_DDRPHY_reg offset 0x68 = 0x%08x\n", value);
+	debug("\nrO_DDRPHY_reg offset 0x68 = 0x%08x\n", value);
 	debug("  rising edge of read data eye training pass window\n");
-	tmp = (((value & GENMASK(7, 0)) >> 0) * 100) / 255;
+	tmp = FIELD_GET(GENMASK(7, 0), value) * 100 / 255;
 	debug("    B0:%d%%\n", tmp);
-	tmp = (((value & GENMASK(15, 8)) >> 8) * 100) / 255;
+	tmp = FIELD_GET(GENMASK(15, 8), value) * 100 / 255;
 	debug("    B1:%d%%\n", tmp);
 
 	value = readl(reg_base + 0xC8);
-	debug("rO_DDRPHY_reg offset 0xC8 = 0x%08x\n", value);
+	debug("\nrO_DDRPHY_reg offset 0xC8 = 0x%08x\n", value);
 	debug("  falling edge of read data eye training pass window\n");
-	tmp = (((value & GENMASK(7, 0)) >> 0) * 100) / 255;
+	tmp = FIELD_GET(GENMASK(7, 0), value) * 100 / 255;
 	debug("    B0:%d%%\n", tmp);
-	tmp = (((value & GENMASK(15, 8)) >> 8) * 100) / 255;
+	tmp = FIELD_GET(GENMASK(15, 8), value) * 100 / 255;
 	debug("    B1:%d%%\n", tmp);
 
 	/* write eye window */
 	value = readl(reg_base + 0x7c);
-	if (0 == (value & GENMASK(7, 0))) {
+	if (FIELD_GET(GENMASK(7, 0), value) == 0)
 		need_retrain = 1;
-	}
 
-	debug("rO_DDRPHY_reg offset 0x7C = 0x%08x\n", value);
-	debug("  rising edge of write data eye training pass window\n");
-	tmp = (((value & GENMASK(7, 0)) >> 0) * 100) / 255;
+	debug("\nrO_DDRPHY_reg offset 0x7C = 0x%08x\n", value);
+	debug("  write data eye training pass window\n");
+	tmp = FIELD_GET(GENMASK(7, 0), value) * 100 / 255;
 	debug("    B0:%d%%\n", tmp);
-	tmp = (((value & GENMASK(15, 8)) >> 8) * 100) / 255;
+	tmp = FIELD_GET(GENMASK(15, 8), value) * 100 / 255;
 	debug("    B1:%d%%\n", tmp);
 
 	/* read Vref (PHY side) training result */
 	value = readl(reg_base + 0x88);
-	debug("rO_DDRPHY_reg offset 0x88 = 0x%08x\n", value);
+	debug("\nrO_DDRPHY_reg offset 0x88 = 0x%08x\n", value);
+	debug("  Read VrefDQ training result\n");
+	tmp = FIELD_GET(GENMASK(7, 0), value) * 10000 / 128;
+	debug("    B0:%d.%d%%\n", tmp / 100, tmp % 100);
+	tmp = FIELD_GET(GENMASK(15, 8), value) * 10000 / 128;
+	debug("    B1:%d.%d%%\n", tmp / 100, tmp % 100);
 
 	/* write Vref (DRAM side) training result */
 	value = readl(reg_base + 0x90);
-	debug("rO_DDRPHY_reg offset 0x90 = 0x%08x\n", value);
+	debug("\nrO_DDRPHY_reg offset 0x90 = 0x%08x\n", value);
+	tmp = readl(info->phy_setting + 0x60) & BIT(6);
+	if (tmp) {
+		value = 4500 + 65 * value;
+		debug("  Write Vref training result: %d.%d%% (range 2)\n",
+		      value / 100, value % 100);
+	} else {
+		value = 6000 + 65 * value;
+		debug("  Write Vref training result: %d.%d%% (range 1)\n",
+		      value / 100, value % 100);
+	}
 
 	/* gate train */
 	value = readl(reg_base + 0x50);
-	if ((0 == (value & GENMASK(15, 0))) ||
-	    (0 == (value & GENMASK(31, 16)))) {
+	debug("\nrO_DDRPHY_reg offset 0x50 = 0x%08x\n", value);
+	if ((FIELD_GET(GENMASK(15, 0), value) == 0) ||
+	    (FIELD_GET(GENMASK(31, 16), value) == 0))
 		need_retrain = 1;
-	}
-#if 0
-	if (((value >> 24) & 0xff) < 3)
-		need_retrain = 1;
-	else
-		need_retrain = 0;
-#endif
-	debug("rO_DDRPHY_reg offset 0x50 = 0x%08x\n", value);
-#if 0
+
 	debug("  gate training pass window\n");
-	tmp = (((value & GENMASK(7, 0)) >> 0) * 100) / 255;
-	debug("    module 0: %d.%03d\n", (value >> 8) & 0xff, tmp);
-        tmp = (((value & GENMASK(23, 16)) >> 0) * 100) / 255;
-	debug("    module 1: %d.%03d\n", (value >> 24) & 0xff, tmp);
-#endif
+	debug("    module 0: 0x%04lx\n", FIELD_GET(GENMASK(15, 0), value));
+	debug("    module 1: 0x%04lx\n", FIELD_GET(GENMASK(31, 16), value));
 
 	return need_retrain;
 #else
