@@ -19,11 +19,17 @@
 /**
  * phyr030[10:8] - ODT configuration (PHY side)
  *   b'000 : ODT disabled
+ *   b'001 : 240 ohm
+ *   b'010 : 120 ohm
+ *   b'011 : 80 ohm
  *   b'100 : 60 ohm
  *   b'101 : 48 ohm
  *   b'110 : 40 ohm (default)
+ *   b'111 : 34 ohm
  */
-#if defined(CONFIG_ASPEED_DDR4_PHY_ODT60)
+#if defined(CONFIG_ASPEED_DDR4_PHY_ODT80)
+#define PHY_ODT			(0x3 << 8)
+#elif defined(CONFIG_ASPEED_DDR4_PHY_ODT60)
 #define PHY_ODT			(0x4 << 8)
 #elif defined(CONFIG_ASPEED_DDR4_PHY_ODT48)
 #define PHY_ODT			(0x5 << 8)
