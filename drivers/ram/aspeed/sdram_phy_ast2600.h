@@ -42,7 +42,7 @@
  *   b'00 : 34 ohm (default)
  *   b'01 : 48 ohm
  */
-#ifdef ASPEED_DDR4_DRAM_RON_48
+#ifdef CONFIG_ASPEED_DDR4_DRAM_RON_48
 #define DRAM_RON			(0x1 << 1)
 #else
 #define DRAM_RON			(0x0 << 1)
