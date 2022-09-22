@@ -206,19 +206,9 @@ static void ast2600_sdramphy_kick_training(struct dram_info *info)
 
 	while (1) {
 		data = readl(&regs->phy_ctrl[0]) & SDRAM_PHYCTRL0_INIT;
-		if (~data) {
+		if (data == 0)
 			break;
-		}
 	}
-
-#if 0
-	while (1) {
-		data = readl(0x1e6e0400) & BIT(1);
-		if (data) {
-			break;
-		}
-	}
-#endif
 #endif
 }
 
@@ -959,11 +949,6 @@ L_ast2600_sdramphy_train:
 
 #if defined(CONFIG_FPGA_ASPEED) || defined(CONFIG_ASPEED_PALLADIUM)
 	ast2600_sdrammc_search_read_window(priv);
-#else
-	/* make sure DDR-PHY is ready before access */
-	do {
-		reg = readl(priv->phy_status) & BIT(1);
-	} while (reg == 0);
 #endif
 
 	ret = ast2600_sdramphy_check_status(priv);
