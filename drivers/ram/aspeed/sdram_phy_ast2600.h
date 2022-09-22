@@ -163,9 +163,9 @@ u32 ast2600_sdramphy_config[165] = {
 	0x00e00400,	// phyr06c
 	0x00140206,	// phyr070
 	0x1d4c0000,	// phyr074
-	0x493e0107,	// phyr078
+	(0x493e0100 | T_PHY_WRLAT),	/* phyr078 */
 	0x08060404,	// phyr07c
-	0x90000a00,	// phyr080
+	(0x90000000 | T_RDDATA_EN),	/* phyr080 */
 	0x06420618,	// phyr084
 	0x00001002,	// phyr088
 	0x05701016,	// phyr08c
@@ -331,9 +331,9 @@ u32 ast2600_sdramphy_config[165] = {
 	0x00e00400,	// phyr06c
 	0x00140206,	// phyr070
 	0x1d4c0000,	// phyr074
-	0x493e0107,	// phyr078
+	(0x493e0100 | T_PHY_WRLAT),	// phyr078
 	0x08060404,	// phyr07c
-	0x90000a00,	// phyr080
+	(0x90000000 | T_RDDATA_EN),	// phyr080
 	0x06420c30,	// phyr084
 	0x00001002,	// phyr088
 	0x05701016,	// phyr08c
