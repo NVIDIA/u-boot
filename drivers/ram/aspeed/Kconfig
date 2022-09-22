@@ -66,7 +66,7 @@ endif
 
 choice
 	prompt "DDR4 PHY side ODT"
-	default ASPEED_DDR4_PHY_ODT40
+	default ASPEED_DDR4_PHY_ODT80
 
 config ASPEED_DDR4_PHY_ODT80
 	bool "DDR4 PHY side ODT 80 ohm"
@@ -95,7 +95,7 @@ endchoice
 
 choice
 	prompt "DDR4 DRAM side ODT"
-	default ASPEED_DDR4_DRAM_ODT40
+	default ASPEED_DDR4_DRAM_ODT48
 
 config ASPEED_DDR4_DRAM_ODT60
 	bool "DDR4 DRAM side ODT 60 ohm"
