@@ -204,7 +204,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x20202020,	// phyr09c
 	0x20202020,	// phyr0a0
 	0x00002020,	// phyr0a4
-	0x80000000,	// phyr0a8
+	0x00000000,	/* phyr0a8 */
 	0x00000001,	// phyr0ac
 	0xaeeddeea,	// change address
 	0x1e6e0318,	// new address
@@ -264,7 +264,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x20202020,	// phyr170
 	0xaeeddeea,	// change address
 	0x1e6e0298,	// new address
-	0x20200800,	// phyr198
+	0x20200000,	/* phyr198 */
 	0x20202020,	// phyr19c
 	0x20202020,	// phyr1a0
 	0x20202020,	// phyr1a4
@@ -372,7 +372,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x20202020,	// phyr09c
 	0x20202020,	// phyr0a0
 	0x00002020,	// phyr0a4
-	0x80000000,	// phyr0a8
+	0x00000000,	/* phyr0a8 */
 	0x00000001,	// phyr0ac
 	0xaeeddeea,	// change address
 	0x1e6e0318,	// new address
@@ -432,7 +432,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x20202020,	// phyr170
 	0xaeeddeea,	// change address
 	0x1e6e0298,	// new address
-	0x20200800,	// phyr198
+	0x20200000,	/* phyr198 */
 	0x20202020,	// phyr19c
 	0x20202020,	// phyr1a0
 	0x20202020,	// phyr1a4
