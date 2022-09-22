@@ -130,6 +130,9 @@
 #define MR5_VAL				(0x0400 | RTT_PARK)
 #define MR6_VAL				0x0400
 
+#define WR_DATA_EYE_OFFSET                                                     \
+	(CONFIG_ASPEED_DDR4_WR_DATA_EYE_TRAINING_RESULT_OFFSET << 8)
+
 #if defined(CONFIG_ASPEED_DDR4_800)
 u32 ast2600_sdramphy_config[165] = {
 	0x1e6e0100,	// start address
@@ -287,7 +290,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x00002020,	// phyr1e8
 	0xaeeddeea,	// change address
 	0x1e6e0304,	// new address
-	0x00000800,	// phyr204
+	(0x00000001 | WR_DATA_EYE_OFFSET), /* phyr204 */
 	0xaeeddeea,	// change address
 	0x1e6e027c,	// new address
 	0x4e400000,	// phyr17c
@@ -455,7 +458,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x00002020,	// phyr1e8
 	0xaeeddeea,	// change address
 	0x1e6e0304,	// new address
-	0x00000800,	// phyr204
+	(0x00000001 | WR_DATA_EYE_OFFSET), /* phyr204 */
 	0xaeeddeea,	// change address
 	0x1e6e027c,	// new address
 	0x4e400000,	// phyr17c
