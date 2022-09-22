@@ -38,6 +38,17 @@
 #endif
 
 /**
+ * MR1[2:1] output driver impedance
+ *   b'00 : 34 ohm (default)
+ *   b'01 : 48 ohm
+ */
+#ifdef ASPEED_DDR4_DRAM_RON_48
+#define DRAM_RON			(0x1 << 1)
+#else
+#define DRAM_RON			(0x0 << 1)
+#endif
+
+/**
  * phyr058[10:8] - ODT configuration (DRAM side)
  *   b'001 : 60 ohm
  *   b'101 : 48 ohm
@@ -76,7 +87,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x00003080,	// phyr04c
 	0x04000000,	// phyr050
 	0x00000200,	// phyr054
-	0x03140201,	// phyr058
+	(0x03140001 | DRAM_ODT | DRAM_RON),	/* phyr058 */
 	0x04800000,	// phyr05c
 	0x0800044e,	// phyr060
 	0x00000000,	// phyr064
@@ -244,7 +255,7 @@ u32 ast2600_sdramphy_config[165] = {
 	0x00003080,	// phyr04c
 	0x04000000,	// phyr050
 	0x00000200,	// phyr054
-	0x03140501,	// phyr058-rtt:40
+	(0x03140001 | DRAM_ODT | DRAM_RON),	/* phyr058 */
 	0x04800000,	// phyr05c
 	0x0800044e,	// phyr060
 	0x00000000,	// phyr064

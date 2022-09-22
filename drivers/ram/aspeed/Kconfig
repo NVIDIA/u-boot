@@ -115,4 +115,21 @@ config ASPEED_DDR4_DRAM_ODT40
 	help
 	  select DDR4 DRAM side ODT 40 ohm
 endchoice
+
+choice
+	prompt "DDR4 DRAM output driver impedance"
+	default ASPEED_DDR4_DRAM_RON_34
+
+config ASPEED_DDR4_DRAM_RON_34
+	bool "DDR4 DRAM output driver impedance 34 ohm"
+	depends on DM && OF_CONTROL && ARCH_ASPEED
+	help
+	  select DDR4 DRAM output driver impedance 34 ohm
+
+config ASPEED_DDR4_DRAM_RON_48
+	bool "DDR4 DRAM output driver impedance 48 ohm"
+	depends on DM && OF_CONTROL && ARCH_ASPEED
+	help
+	  select DDR4 DRAM output driver impedance 48 ohm
+endchoice
 endif
