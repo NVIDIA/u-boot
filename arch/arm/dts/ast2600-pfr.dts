@@ -125,21 +125,21 @@
 
 	flash@0 {
 		status = "okay";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
 
 	flash@1 {
 		status = "okay";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
 
 	flash@2 {
 		status = "disabled";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
@@ -156,14 +156,14 @@
 
 	flash@0 {
 		status = "okay";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
 
 	flash@1 {
 		status = "okay";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
@@ -179,21 +179,21 @@
 
 	flash@0 {
 		status = "okay";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
 
 	flash@1 {
 		status = "disabled";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
 
 	flash@2 {
 		status = "disabled";
-		spi-max-frequency = <25000000>;
+		spi-max-frequency = <12500000>;
 		spi-tx-bus-width = <1>;
 		spi-rx-bus-width = <1>;
 	};
