@@ -470,6 +470,14 @@ static ulong ast2500_configure_mac(struct ast2500_scu *scu, int index)
 	case 2:
 		reset_bit = BIT(ASPEED_RESET_MAC2);
 		clkstop_bit = BIT(SCU_CLKSTOP_MAC2);
+#ifdef MAC2_RCLK_DELAY
+		//set mac1 rclk delay to 0
+		//mac1 rclk delay is 6bits wide, bits 18:23
+		clk_delay_settings =
+		(clk_delay_settings &
+		(~(0x3f << SCU_MICDS_MAC2RMII_RDLY_SHIFT))) |
+		((MAC2_RCLK_DELAY & 0x3f) << SCU_MICDS_MAC2RMII_RDLY_SHIFT);
+#endif
 		break;
 	default:
 		return -EINVAL;
