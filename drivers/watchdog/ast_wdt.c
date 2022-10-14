@@ -103,7 +103,11 @@ static int ast_wdt_start(struct udevice *dev, u64 timeout, ulong flags)
 	
 	writel(WDT_COUNTER_RESTART_VAL, &priv->regs->counter_restart);
 
+#ifdef CONFIG_ASPEED_AST2500
+	writel(WDT_CTRL_EN | WDT_CTRL_RESET | WDT_CTRL_2ND_BOOT, &priv->regs->ctrl);
+#else
 	writel(WDT_CTRL_EN | WDT_CTRL_RESET, &priv->regs->ctrl);
+#endif
 
 	return 0;
 }
