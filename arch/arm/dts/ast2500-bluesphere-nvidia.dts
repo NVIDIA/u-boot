@@ -1,0 +1,55 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree Source extras for U-Boot for the BlueSphere
+ * Copyright (C) Nvidia
+ */
+#include "ast2500-evb.dts"
+/ {
+	aliases {
+		spi2 = &spi2;
+
+	};
+	config {
+		bootdelay = <(-2)>;
+		bootsecure = <1>;
+		bootcmd = "boot";
+	};
+};
+
+&spi2 {
+	status = "okay";
+	flash@0 {
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_spi2cs0_default>;
+		compatible = "spi-flash", "sst,w25q256";
+		status = "okay";
+		spi-max-frequency = <50000000>;
+		spi-tx-bus-width = <2>;
+		spi-rx-bus-width = <2>;
+	};
+};
+
+&i2c6 {
+	status = "okay";
+	eeprom@50 {
+		compatible = "st,24c128", "atmel,24c128";
+		reg = <0x50>;
+		pagesize = <64>;
+		eth2macoffset = <0xff 0x79 0xff 0xff 0xff 0xff>;
+	};
+};
+
+&mac0 {
+	status = "disabled";
+};
+
+&mac1 {
+	status = "okay";
+	phy-mode = "rgmii";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mac2link_default &pinctrl_mdio2_default>;
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
+};

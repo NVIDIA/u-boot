@@ -679,6 +679,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2400-ahe-50dc.dtb \
 	ast2400-palmetto.dtb \
 	ast2500-evb.dtb \
+	ast2500-bluesphere-nvidia.dtb \
 	ast2600a0-evb.dtb \
 	ast2600a1-evb.dtb \
 	ast2600-bletchley.dtb \
@@ -693,6 +694,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2600-slt.dtb \
 	ast2600-tacoma.dtb \
 	ast2600-e4830-nvidia.dtb \
+	ast2600-moonraker-nvidia.dtb \
 	ast2600a1-lunadp.dtb
 
 dtb-$(CONFIG_ARCH_STI) += stih410-b2260.dtb

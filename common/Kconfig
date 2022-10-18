@@ -656,6 +656,36 @@ config MACADDR_IN_EEPROM
           This option is for reading MAC address from EEPROM
           and set the MAC address in MAC env.
 
+config HAS_ETH1
+	bool "Configure if eth1 is used"
+	default n
+        help
+          This option is used to enable options like MACADDR_IN_EEPROM on eth1
+
+config HAS_ETH2
+	bool "Configure if eth1 is used"
+	default n
+        help
+          This option is used to enable options like MACADDR_IN_EEPROM on eth2
+
+config HAS_ETH3
+	bool "Configure if eth1 is used"
+	default n
+        help
+          This option is used to enable options like MACADDR_IN_EEPROM on eth3
+
+config HAS_ETH4
+	bool "Configure if eth1 is used"
+	default n
+        help
+          This option is used to enable options like MACADDR_IN_EEPROM on eth4
+
+config HAS_ETH5
+	bool "Configure if eth1 is used"
+	default n
+        help
+          This option is used to enable options like MACADDR_IN_EEPROM on eth5
+
 config VERSION_VARIABLE
 	bool "add U-Boot environment variable vers"
 	default n
