@@ -1,0 +1,20 @@
+if TARGET_MELLANOX_AST2500BLUESPHERE
+
+config SYS_CPU
+	default "arm1176"
+
+config SYS_BOARD
+	default "mlnxast2500bluesphere"
+
+config SYS_VENDOR
+	default "nvidia"
+
+config SYS_SOC
+	default "aspeed"
+
+config SYS_CONFIG_NAME
+	default "mlnxast2500bluesphere"
+
+config FIRMWARE_2ND_BOOT
+	bool "Firmware second boot WD2 enable."
+endif

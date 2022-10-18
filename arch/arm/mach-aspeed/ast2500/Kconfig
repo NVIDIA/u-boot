@@ -15,8 +15,12 @@ config TARGET_EVB_AST2500
 	  It has 512M of RAM, 32M of SPI flash, two Ethernet ports,
 	  4 Serial ports, 4 USB ports, VGA port, PCIe, SD card slot,
 	  20 pin JTAG, pinouts for 14 I2Cs, 3 SPIs and eSPI, 8 PWMs.
+
+config TARGET_MELLANOX_AST2500BLUESPHERE
+       bool "Support Mellanox BlueSphere (based on AST2500 SoC)"
+
 endchoice
 
 source "board/aspeed/evb_ast2500/Kconfig"
-
+source "board/nvidia/mlnxast2500bluesphere/Kconfig"
 endif
