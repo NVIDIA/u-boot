@@ -39,11 +39,13 @@ static int aspeed_dp_probe(struct udevice *dev)
 		return ret;
 	}
 
-	/* release reset for DPTX and DPMCU */
-	reset_assert(&dp_reset_ctl);
-	reset_assert(&dpmcu_reset_ctrl);
-	reset_deassert(&dp_reset_ctl);
-	reset_deassert(&dpmcu_reset_ctrl);
+	/* reset for DPTX and DPMCU if MCU isn't running */
+	if ((readl(0x1e6e2100) & BIT(13)) == 0) {
+		reset_assert(&dp_reset_ctl);
+		reset_assert(&dpmcu_reset_ctrl);
+		reset_deassert(&dp_reset_ctl);
+		reset_deassert(&dpmcu_reset_ctrl);
+	}
 
 	/* select HOST or BMC as display control master
 	enable or disable sending EDID to Host	*/
