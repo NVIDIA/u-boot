@@ -676,16 +676,22 @@ dtb-$(CONFIG_ARCH_BCM6858) += \
 
 dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2400-evb.dtb \
+	ast2400-ahe-50dc.dtb \
+	ast2400-palmetto.dtb \
 	ast2500-evb.dtb \
-	ast2600-evb.dtb \
-	ast2600-ncsi.dtb \
 	ast2600a0-evb.dtb \
 	ast2600a1-evb.dtb \
+	ast2600-bletchley.dtb \
+	ast2600-evb.dtb \
 	ast2600-fpga.dtb \
-	ast2600-rainier.dtb \
+	ast2600-intel.dtb \
+	ast2600-ncsi.dtb \
+	ast2600-p10bmc.dtb \
+	ast2600-pfr.dtb \
+	ast2600-qcom-dc-scm-v1.dtb \
+	ast2600-s6q.dtb \
 	ast2600-slt.dtb \
 	ast2600-tacoma.dtb \
-	ast2600-intel.dtb \
 	ast2600-e4830-nvidia.dtb \
 	ast2600a1-lunadp.dtb
 

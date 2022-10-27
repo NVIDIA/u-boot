@@ -4,14 +4,80 @@
 #include <ram.h>
 #include <timer.h>
 #include <asm/io.h>
+#include <asm/arch/platform.h>
+#include <asm/arch/scu_ast2400.h>
 #include <asm/arch/timer.h>
 #include <linux/err.h>
 #include <dm/uclass.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
+#define AST_LPC_HICR5 0x080
+# define LPC_HICR5_ENFWH BIT(10)
+#define AST_LPC_HICRB 0x100
+# define LPC_HICRB_SIO_ILPC2AHB_DIS BIT(6)
+
+#define AST_SDMC_PROTECT 0x00
+# define SDRAM_UNLOCK_KEY 0xfc600309
+#define AST_SDMC_GFX_PROT 0x08
+# define SDMC_GFX_PROT_VGA_CURSOR BIT(0)
+# define SDMC_GFX_PROT_VGA_CG_READ BIT(1)
+# define SDMC_GFX_PROT_VGA_ASCII_READ BIT(2)
+# define SDMC_GFX_PROT_VGA_CRT BIT(3)
+# define SDMC_GFX_PROT_PCIE BIT(16)
+# define SDMC_GFX_PROT_XDMA BIT(17)
+
+static void isolate_bmc(void)
+{
+	bool sdmc_unlocked;
+	u32 val;
+
+	/* iLPC2AHB */
+#if !defined(CONFIG_ASPEED_ENABLE_SUPERIO)
+	val = readl(ASPEED_HW_STRAP1);
+	val |= SCU_HWSTRAP_LPC_SIO_DEC_DIS;
+	writel(val, ASPEED_HW_STRAP1);
+#endif
+
+	val = readl(ASPEED_LPC_CTRL + AST_LPC_HICRB);
+	val |= LPC_HICRB_SIO_ILPC2AHB_DIS;
+	writel(val, ASPEED_LPC_CTRL + AST_LPC_HICRB);
+
+	/* P2A, PCIe BMC */
+	val = readl(ASPEED_PCIE_CONFIG_SET);
+	val &= ~(SCU_PCIE_CONFIG_SET_BMC_DMA
+	         | SCU_PCIE_CONFIG_SET_BMC_MMIO
+	         | SCU_PCIE_CONFIG_SET_BMC_EN
+	         | SCU_PCIE_CONFIG_SET_VGA_MMIO);
+	writel(val, ASPEED_PCIE_CONFIG_SET);
+
+	/* X-DMA */
+	sdmc_unlocked = readl(ASPEED_SDRAM_CTRL + AST_SDMC_PROTECT);
+	if (!sdmc_unlocked)
+		writel(SDRAM_UNLOCK_KEY, ASPEED_SDRAM_CTRL + AST_SDMC_PROTECT);
+
+	val = readl(ASPEED_SDRAM_CTRL + AST_SDMC_GFX_PROT);
+	val |= (SDMC_GFX_PROT_VGA_CURSOR
+	        | SDMC_GFX_PROT_VGA_CG_READ
+	        | SDMC_GFX_PROT_VGA_ASCII_READ
+	        | SDMC_GFX_PROT_VGA_CRT
+	        | SDMC_GFX_PROT_PCIE
+	        | SDMC_GFX_PROT_XDMA);
+	writel(val, ASPEED_SDRAM_CTRL + AST_SDMC_GFX_PROT);
+
+	if (!sdmc_unlocked)
+		writel(~SDRAM_UNLOCK_KEY, ASPEED_SDRAM_CTRL + AST_SDMC_PROTECT);
+
+	/* LPC2AHB */
+	val = readl(ASPEED_LPC_CTRL + AST_LPC_HICR5);
+	val &= ~LPC_HICR5_ENFWH;
+	writel(val, ASPEED_LPC_CTRL + AST_LPC_HICR5);
+}
+
 __weak int board_init(void)
 {
+	isolate_bmc();
+
 	gd->bd->bi_boot_params = CONFIG_SYS_SDRAM_BASE + 0x100;
 
 	return 0;

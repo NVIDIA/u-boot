@@ -1,0 +1,38 @@
+/dts-v1/;
+
+#include "ast2400-evb.dts"
+
+/ {
+	model = "Delta AHE-50DC BMC";
+	compatible = "delta,ahe-50dc-bmc", "aspeed,ast2400-evb", "aspeed,ast2400";
+
+	chosen {
+		stdout-path = &uart3;
+	};
+};
+
+&uart5 {
+	status = "disabled";
+};
+
+&uart3 {
+	u-boot,dm-pre-reloc;
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_txd3_default &pinctrl_rxd3_default>;
+};
+
+&mac0 {
+	status = "disabled";
+};
+
+&mac1 {
+	status = "okay";
+	phy-mode = "rgmii";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_rgmii2_default &pinctrl_mdio2_default>;
+};
+
+&spi1 {
+	status = "disabled";
+};

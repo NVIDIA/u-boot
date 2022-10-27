@@ -236,6 +236,13 @@ static int aspeed_secboot_spl_ymodem_load_image(struct spl_image_info *spl_image
 	int res;
 	int ret = 0;
 
+	/*
+	 * disable ABR WDT for eMMC and boot SPI, otherwise, image
+	 * transmission will be interrupted during boot from UART.
+	 */
+	writel(0x0, 0x1e6f20a0);
+	writel(0x0, 0x1e620064);
+
 	conn_info.mode = xyzModem_ymodem;
 	ret = xyzModem_stream_open(&conn_info, &err);
 	if (ret) {

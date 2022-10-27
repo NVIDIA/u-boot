@@ -205,7 +205,7 @@
 
 &emmc {
 	u-boot,dm-pre-reloc;
-	timing-phase = <0x700ff>;
+	timing-phase = <0x000700bf>;
 };
 
 &emmc_slot0 {
@@ -218,7 +218,7 @@
 };
 
 &sdhci {
-	timing-phase = <0xc6ffff>;
+	timing-phase = <0x01084747>;
 };
 
 &sdhci_slot0 {
@@ -276,13 +276,6 @@
 	pinctrl-0 = <&pinctrl_i2c9_default>;
 };
 
-&pcie_bridge1 {
-	status = "okay";
-};
-
-&h2x {
-	status = "okay";
-};
 
 #if 0
 &fsim0 {
@@ -318,5 +311,11 @@
 };
 
 &hace {
+	u-boot,dm-pre-reloc;
+	status = "okay";
+};
+
+&acry {
+	u-boot,dm-pre-reloc;
 	status = "okay";
 };

@@ -27,6 +27,7 @@ static struct soc_id soc_map_table[] = {
 	SOC_ID("AST2600-A3", 0x0503030305030303),
 	SOC_ID("AST2620-A3", 0x0503020305030203),
 	SOC_ID("AST2605-A3", 0x0503010305030103),
+	SOC_ID("AST2625-A3", 0x0503040305030403),
 };
 
 void aspeed_print_soc_id(void)
@@ -94,7 +95,6 @@ void aspeed_print_security_info(void)
 	u32 sb_sts = readl(ASPEED_SB_STS);
 	u32 hash;
 	u32 rsa;
-	char alg[20];
 
 	if (!(sb_sts & BIT(6)))
 		return;
@@ -103,38 +103,39 @@ void aspeed_print_security_info(void)
 		hash = (qsr >> 10) & 3;
 		rsa = (qsr >> 12) & 3;
 
+		printf("Mode_2, ");
+
 		if (qsr & BIT(27)) {
-			sprintf(alg + strlen(alg), "AES_");
+			printf("AES_");
 		}
 		switch (rsa) {
 		case 0:
-			sprintf(alg + strlen(alg), "RSA1024_");
+			printf("RSA1024_");
 			break;
 		case 1:
-			sprintf(alg + strlen(alg), "RSA2048_");
+			printf("RSA2048_");
 			break;
 		case 2:
-			sprintf(alg + strlen(alg), "RSA3072_");
+			printf("RSA3072_");
 			break;
 		default:
-			sprintf(alg + strlen(alg), "RSA4096_");
+			printf("RSA4096_");
 			break;
 		}
 		switch (hash) {
 		case 0:
-			sprintf(alg + strlen(alg), "SHA224");
+			printf("SHA224\n");
 			break;
 		case 1:
-			sprintf(alg + strlen(alg), "SHA256");
+			printf("SHA256\n");
 			break;
 		case 2:
-			sprintf(alg + strlen(alg), "SHA384");
+			printf("SHA384\n");
 			break;
 		default:
-			sprintf(alg + strlen(alg), "SHA512");
+			printf("SHA512\n");
 			break;
 		}
-		printf("Mode_2, %s\n", alg);
 	} else {
 		printf("Mode_GCM\n");
 		return;

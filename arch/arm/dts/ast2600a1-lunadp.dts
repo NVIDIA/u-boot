@@ -182,18 +182,18 @@
 	pinctrl-0 = <&pinctrl_i2c9_default>;
 };
 
-&pcie_bridge1 {
+&pcie_rc_bridge1 {
 	status = "okay";
 };
 
-&h2x {
+&pcie_bridge {
 	status = "okay";
 };
-
 
 &ehci1 {
 	status = "okay";
 };
+
 &scu {
 	mac0-clk-delay = <0x10 0x0a
 			  0x10 0x10

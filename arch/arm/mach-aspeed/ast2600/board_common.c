@@ -157,7 +157,7 @@ int arch_early_init_r(void)
 
 void board_add_ram_info(int use_default)
 {
-#define MMC_BASE 0x1e6e0000	
+#define MMC_BASE 0x1e6e0000
 #define SCU_BASE 0x1e6e2000
 	uint32_t act_size = 256 << (readl(MMC_BASE + 0x04) & 0x3);
 	uint32_t vga_rsvd = 8 << ((readl(MMC_BASE + 0x04) >> 2) & 0x3);
@@ -167,8 +167,13 @@ void board_add_ram_info(int use_default)
 	if (readl(SCU_BASE + 0x594) & BIT(14))
 		vga_rsvd = 0;
 
-	printf(" (capacity:%d MiB, VGA:%d MiB), ECC %s", act_size,
+	printf(" (capacity:%d MiB, VGA:%d MiB, ECC:%s", act_size,
 	       vga_rsvd, ecc == 1 ? "on" : "off");
+
+	if (ecc)
+		printf(", ECC size:%d MiB", (readl(MMC_BASE + 0x54) >> 20) + 1);
+
+	printf(")");
 }
 
 union ast2600_pll_reg {
