@@ -109,6 +109,6 @@ struct aspeed_rc_bridge {
 	void *reg;
 };
 
-int aspeed_pcie_phy_link_status(struct udevice *dev);
+int aspeed_rc_bridge_link_status(struct udevice *dev);
 
 #endif

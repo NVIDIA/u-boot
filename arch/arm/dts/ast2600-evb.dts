@@ -276,15 +276,13 @@
 	pinctrl-0 = <&pinctrl_i2c9_default>;
 };
 
-&pcie_bridge1 {
+&pcie_rc_bridge1 {
 	status = "okay";
 };
 
-#if 0
-&h2x {
+&pcie_bridge {
 	status = "okay";
 };
-#endif
 
 #if 0
 &fsim0 {
@@ -320,9 +318,11 @@
 };
 
 &hace {
+	u-boot,dm-pre-reloc;
 	status = "okay";
 };
 
 &acry {
+	u-boot,dm-pre-reloc;
 	status = "okay";
 };
