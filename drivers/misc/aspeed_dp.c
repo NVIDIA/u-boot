@@ -20,7 +20,10 @@ static int aspeed_dp_probe(struct udevice *dev)
 {
 	struct aspeed_dp_priv *dp = dev_get_priv(dev);
 	struct reset_ctl dp_reset_ctl, dpmcu_reset_ctrl;
-	int i, ret = 0;
+	int i, ret = 0, len;
+	const u32 *cell;
+	u32 tmp, mcu_ctrl;
+	bool is_mcu_stop = ((readl(0x1e6e2100) & BIT(13)) == 0);
 
 	/* Get the controller base address */
 	dp->ctrl_base = (void *)devfdt_get_addr_index(dev, 0);
@@ -40,7 +43,7 @@ static int aspeed_dp_probe(struct udevice *dev)
 	}
 
 	/* reset for DPTX and DPMCU if MCU isn't running */
-	if ((readl(0x1e6e2100) & BIT(13)) == 0) {
+	if (is_mcu_stop) {
 		reset_assert(&dp_reset_ctl);
 		reset_assert(&dpmcu_reset_ctrl);
 		reset_deassert(&dp_reset_ctl);
@@ -69,6 +72,66 @@ static int aspeed_dp_probe(struct udevice *dev)
 	writel(0x10001110, 0x180100e0);
 	//disable dp interrupt
 	writel(0x00ff0000, 0x180100e8);
+	if (is_mcu_stop) {
+		mcu_ctrl = MCU_CTRL_CONFIG | MCU_CTRL_IMEM_CLK_OFF | MCU_CTRL_IMEM_SHUT_DOWN |
+		      MCU_CTRL_DMEM_CLK_OFF | MCU_CTRL_DMEM_SHUT_DOWN | MCU_CTRL_AHBS_SW_RST;
+		writel(mcu_ctrl, MCU_CTRL);
+
+		mcu_ctrl &= ~(MCU_CTRL_IMEM_SHUT_DOWN | MCU_CTRL_DMEM_SHUT_DOWN);
+		writel(mcu_ctrl, MCU_CTRL);
+
+		mcu_ctrl &= ~(MCU_CTRL_IMEM_CLK_OFF | MCU_CTRL_DMEM_CLK_OFF);
+		writel(mcu_ctrl, MCU_CTRL);
+
+		mcu_ctrl |= MCU_CTRL_AHBS_IMEM_EN;
+		writel(mcu_ctrl, MCU_CTRL);
+
+		for (i = 0; i < ARRAY_SIZE(firmware_ast2600_dp); i++)
+			writel(firmware_ast2600_dp[i], MCU_IMEM_START + (i * 4));
+	}
+
+	// update configs to dmem for re-driver
+	writel(0x0000dead, 0x18000e00);	// mark re-driver cfg not ready
+	cell = dev_read_prop(dev, "eq-table", &len);
+	if (cell) {
+		for (i = 0; i < len / sizeof(u32); ++i)
+			writel(fdt32_to_cpu(cell[i]), 0x18000e04 + i * 4);
+	} else {
+		debug("%s(): Failed to get eq-table for re-driver\n", __func__);
+		goto ERR_DTS;
+	}
+
+	tmp = dev_read_s32_default(dev, "i2c-base-addr", -1);
+	if (tmp == -1) {
+		debug("%s(): Failed to get i2c port's base address\n", __func__);
+		goto ERR_DTS;
+	}
+	writel(tmp, 0x18000e28);
+
+	tmp = dev_read_s32_default(dev, "i2c-buf-addr", -1);
+	if (tmp == -1) {
+		debug("%s(): Failed to get i2c port's buf address\n", __func__);
+		goto ERR_DTS;
+	}
+	writel(tmp, 0x18000e2c);
+
+	tmp = dev_read_s32_default(dev, "dev-addr", -1);
+	if (tmp == -1)
+		tmp = 0x70;
+	writel(tmp, 0x18000e30);
+	writel(0x0000cafe, 0x18000e00);	// mark re-driver cfg ready
+
+ERR_DTS:
+	if (is_mcu_stop) {
+		/* release DPMCU internal reset */
+		mcu_ctrl &= ~MCU_CTRL_AHBS_IMEM_EN;
+		writel(mcu_ctrl, MCU_CTRL);
+		mcu_ctrl |= MCU_CTRL_CORE_SW_RST | MCU_CTRL_AHBM_SW_RST;
+		writel(mcu_ctrl, MCU_CTRL);
+		//disable dp interrupt
+		writel(FIELD_PREP(MCU_INTR_CTRL_EN, 0xff), MCU_INTR_CTRL);
+	}
+
 	//set vga ASTDP with DPMCU FW handling scratch
 	writel(readl(0x1e6e2100) | (0x7 << 9), 0x1e6e2100);	
 
