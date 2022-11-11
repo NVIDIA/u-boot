@@ -16,13 +16,50 @@ struct aspeed_dp_priv {
 	void *ctrl_base;
 };
 
+static void _redriver_cfg(struct udevice *dev)
+{
+	const u32 *cell;
+	int i, len;
+	u32 tmp;
+
+	// update configs to dmem for re-driver
+	writel(0x0000dead, 0x18000e00);	// mark re-driver cfg not ready
+	cell = dev_read_prop(dev, "eq-table", &len);
+	if (cell) {
+		for (i = 0; i < len / sizeof(u32); ++i)
+			writel(fdt32_to_cpu(cell[i]), 0x18000e04 + i * 4);
+	} else {
+		debug("%s(): Failed to get eq-table for re-driver\n", __func__);
+		return;
+	}
+
+	tmp = dev_read_s32_default(dev, "i2c-base-addr", -1);
+	if (tmp == -1) {
+		debug("%s(): Failed to get i2c port's base address\n", __func__);
+		return;
+	}
+	writel(tmp, 0x18000e28);
+
+	tmp = dev_read_s32_default(dev, "i2c-buf-addr", -1);
+	if (tmp == -1) {
+		debug("%s(): Failed to get i2c port's buf address\n", __func__);
+		return;
+	}
+	writel(tmp, 0x18000e2c);
+
+	tmp = dev_read_s32_default(dev, "dev-addr", -1);
+	if (tmp == -1)
+		tmp = 0x70;
+	writel(tmp, 0x18000e30);
+	writel(0x0000cafe, 0x18000e00);	// mark re-driver cfg ready
+}
+
 static int aspeed_dp_probe(struct udevice *dev)
 {
 	struct aspeed_dp_priv *dp = dev_get_priv(dev);
 	struct reset_ctl dp_reset_ctl, dpmcu_reset_ctrl;
-	int i, ret = 0, len;
-	const u32 *cell;
-	u32 tmp, mcu_ctrl;
+	int i, ret = 0;
+	u32 mcu_ctrl;
 	bool is_mcu_stop = ((readl(0x1e6e2100) & BIT(13)) == 0);
 
 	/* Get the controller base address */
@@ -57,7 +94,9 @@ static int aspeed_dp_probe(struct udevice *dev)
 	/* DPMCU */
 	/* clear display format and enable region */
 	writel(0, 0x18000de0);
-	
+
+	_redriver_cfg(dev);
+
 	/* load DPMCU firmware to internal instruction memory */
 	writel(0x10550010, 0x180100e0);
 	writel(0x10440010, 0x180100e0);
@@ -88,41 +127,7 @@ static int aspeed_dp_probe(struct udevice *dev)
 
 		for (i = 0; i < ARRAY_SIZE(firmware_ast2600_dp); i++)
 			writel(firmware_ast2600_dp[i], MCU_IMEM_START + (i * 4));
-	}
 
-	// update configs to dmem for re-driver
-	writel(0x0000dead, 0x18000e00);	// mark re-driver cfg not ready
-	cell = dev_read_prop(dev, "eq-table", &len);
-	if (cell) {
-		for (i = 0; i < len / sizeof(u32); ++i)
-			writel(fdt32_to_cpu(cell[i]), 0x18000e04 + i * 4);
-	} else {
-		debug("%s(): Failed to get eq-table for re-driver\n", __func__);
-		goto ERR_DTS;
-	}
-
-	tmp = dev_read_s32_default(dev, "i2c-base-addr", -1);
-	if (tmp == -1) {
-		debug("%s(): Failed to get i2c port's base address\n", __func__);
-		goto ERR_DTS;
-	}
-	writel(tmp, 0x18000e28);
-
-	tmp = dev_read_s32_default(dev, "i2c-buf-addr", -1);
-	if (tmp == -1) {
-		debug("%s(): Failed to get i2c port's buf address\n", __func__);
-		goto ERR_DTS;
-	}
-	writel(tmp, 0x18000e2c);
-
-	tmp = dev_read_s32_default(dev, "dev-addr", -1);
-	if (tmp == -1)
-		tmp = 0x70;
-	writel(tmp, 0x18000e30);
-	writel(0x0000cafe, 0x18000e00);	// mark re-driver cfg ready
-
-ERR_DTS:
-	if (is_mcu_stop) {
 		/* release DPMCU internal reset */
 		mcu_ctrl &= ~MCU_CTRL_AHBS_IMEM_EN;
 		writel(mcu_ctrl, MCU_CTRL);
