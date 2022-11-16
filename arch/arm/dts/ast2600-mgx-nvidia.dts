@@ -176,18 +176,17 @@
 };
 
 
-&pcie_bridge1 {
-	status = "okay";
-};
-
-&h2x {
-	status = "okay";
-};
-
 &ehci0 {
 	status = "okay";
 };
 
+&pcie_rc_bridge1 {
+	status = "okay";
+};
+
+&pcie_bridge {
+	status = "okay";
+};
 &scu {
 	mac0-clk-delay = <0x10 0x0a
 			  0x10 0x10
