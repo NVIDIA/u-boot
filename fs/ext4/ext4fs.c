@@ -69,7 +69,6 @@ int ext4fs_read_file(struct ext2fs_node *node, loff_t pos,
 		len = (filesize - pos);
 
 	if (blocksize <= 0 || len <= 0) {
-		ext_cache_fini(&cache);
 		return -1;
 	}
 
