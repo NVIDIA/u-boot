@@ -6,6 +6,7 @@
  */
 
 #include <linux/libfdt_env.h>
+#include <stdbool.h>
 
 #ifndef USE_HOSTCC
 #include <fdt.h>
