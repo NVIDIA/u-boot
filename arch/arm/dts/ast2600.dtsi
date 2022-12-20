@@ -143,7 +143,7 @@
 
 		spi1: flash-controller@1e630000 {
 			reg = <0x1e630000 0xc4
-			       0x30000000 0x08000000>;
+			       0x30000000 0x10000000>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "aspeed,ast2600-spi";
@@ -164,7 +164,7 @@
 
 		spi2: flash-controller@1e631000 {
 			reg = <0x1e631000 0xc4
-			       0x50000000 0x08000000>;
+			       0x50000000 0x10000000>;
 			#address-cells = <1>;
 			#size-cells = <0>;
 			compatible = "aspeed,ast2600-spi";

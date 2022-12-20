@@ -1016,7 +1016,8 @@ static int aspeed_spi_flash_set_segment(struct aspeed_spi_priv *priv,
 	if (priv->new_ver) {
 		for (cs = 0; cs < ASPEED_SPI_MAX_CS; cs++) {
 			reg_val = readl(&priv->regs->segment_addr[cs]);
-			if (G6_SEGMENT_ADDR_END(reg_val) > G6_SEGMENT_ADDR_START(reg_val)) {
+			if (reg_val != 0 &&
+			    G6_SEGMENT_ADDR_END(reg_val) > G6_SEGMENT_ADDR_START(reg_val)) {
 				decode_sz_arr[cs] =
 					G6_SEGMENT_ADDR_END(reg_val) - G6_SEGMENT_ADDR_START(reg_val);
 			} else {
