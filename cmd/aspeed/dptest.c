@@ -138,6 +138,20 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 	DPPHY_Set();
 	printf("DP Physcial Config Done!\n");
 
+	printf("Commands as below:\n");
+	printf("0: Change SSC on/off\n");
+	printf("1: Set data rate 1.62\n");
+	printf("2: Set data rate 2.7\n");
+#ifdef INTERNAL
+	printf("3: DE_LVL = 1, DE_LVL_1 = 2\n");
+	printf("4: DE_LVL = 0, DE_LVL_1 = 0\n");
+	printf("5: DE_LVL = 2, DE_LVL_1 = 1\n");
+#endif
+	printf("!: Show configs\n\n");
+
+	printf("TestItems as below:\n");
+	printf("x: auto test\n");
+	printf("a: PRBS7\n");
 	printf("Press ESC key to leave test ...\n\n");
 
 	// While for auto testing
@@ -148,7 +162,7 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 			/* printf("Press %d\n",received); */
 
 			/* Set parameters path */
-			if (received >= 49 && received <= 53) {
+			if (received >= '1' && received <= '9') {
 				switch (received) {
 				/* Press "1" : Set DP_Rate as 1.62 */
 				case '1':
@@ -817,7 +831,7 @@ void Apply_HPD_Auto_Test(void)
 
 	Length = 1;
 	AUX_R(AUX_CMD_R, 0x201, (int *)(&AUX_Data), &Length, &Status);
-	DBG(DBG_A_TEST, "3.HP_I R 0x201 done!\n");
+	DBG(DBG_A_TEST, "3.HP_I R 0x201 : 0x%x\n", AUX_Data[0]);
 
 	/* Obtain auto test */
 	if (AUX_Data[0] & 0x2)
@@ -861,7 +875,7 @@ void Apply_HPD_Auto_Test(void)
 
 		/* Fetch Testing data */
 		AUX_R(AUX_CMD_R, 0x218, (int *)(&AUX_Data), &Length, &Status);
-		DBG(DBG_A_TEST, "2.HP_I CA R 0x218 done!\n");
+		DBG(DBG_A_TEST, "2.HP_I CA R 0x218 : 0x%x\n", AUX_Data[0]);
 
 		/* Check auto test link flag */
 		if (AUX_Data[0] & 0x1)
@@ -874,6 +888,7 @@ void Apply_HPD_Auto_Test(void)
 			auto_test_phy = 1;
 		else
 			auto_test_phy = 0;
+		DBG(DBG_A_TEST, "auto test link(%d) phy(%d)\n", auto_test_link, auto_test_phy);
 
 		if (auto_test_link) {
 			AUX_R(AUX_CMD_R, 0x219, (int *)(&AUX_Data), &Length, &Status);
@@ -1073,12 +1088,12 @@ void Apply_HPD_Auto_Test(void)
 			flag |= F_EMPHASIS_1;
 
 			AUX_R(AUX_CMD_R, 0x102, (int *)(&AUX_Data), &Length, &Status);
-			DBG(DBG_A_TEST, "3.HP_I TP R 0x102 done!\n");
+			DBG(DBG_A_TEST, "3.HP_I TP R 0x102 : 0x%x\n", AUX_Data[0]);
 			temp0 = AUX_Data[0];
 
 			Length = 2;
 			AUX_R(AUX_CMD_R, 0x10b, (int *)(&AUX_Data), &Length, &Status);
-			DBG(DBG_A_TEST, "4.HP_I TP R 0x10b done!\n");
+			DBG(DBG_A_TEST, "4.HP_I TP R 0x10b : 0x%x\n", AUX_Data[0]);
 
 			AUX_W(AUX_CMD_W, 0x10b, (int *)(&AUX_Data), &Length, &Status);
 			DBG(DBG_A_TEST, "5.HP_I TP W 0x10b done!\n");
@@ -1150,12 +1165,12 @@ void Apply_Auto_Mesument(void)
 			CR_EQ_Keep = 0;
 
 			if (temp & 0x2000) {
-				printf("DP HPD event is detected!\n");
+				printf("DP HPD irq is detected!\n");
 				Apply_HPD_Normal();
 			}
 
 			if (temp & 0x800) {
-				printf("DP HPD irq is detected!\n");
+				printf("DP HPD event is detected!\n");
 				Apply_HPD_Auto_Test();
 			}
 		}
