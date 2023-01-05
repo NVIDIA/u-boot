@@ -62,6 +62,7 @@ int	Deemphasis_Show;
 int	Deemphasis_RD;
 int	Swing_Level;
 int	SSCG;
+int	SSC_SHIFT;
 int	Current_Item;
 int	GFlag;
 uchar	EDID[256];
@@ -96,6 +97,7 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 	Deemphasis_Level_1	= DP_DEEMP_2;
 	Swing_Level		= 2;
 	SSCG			= DP_SSCG_ON;
+	SSC_SHIFT		= 1;
 
 	/* Obtain the argc / argv */
 	for (i = 1; i < argc; i++) {
@@ -205,6 +207,12 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 					PRINT_DEEMP_2;
 					break;
 #endif
+				case '6':
+					SSC_SHIFT = 2;
+					break;
+				case '7':
+					SSC_SHIFT = 3;
+					break;
 				default:
 					break;
 				}
@@ -1223,7 +1231,7 @@ void Apply_Main_Mesument(int flag)
 	/* ssc special patch */
 	if (flag & F_PAT_D10_2) {
 		/*Apply special patch*/
-		writel(0x00000400, DP_TX_RES_CFG);
+		writel(SSC_SHIFT << 10, DP_TX_RES_CFG);
 		TX_SSCG_Cfg |= DP_SSCG_ON;
 	} else {
 		/*Recover into original setting*/
