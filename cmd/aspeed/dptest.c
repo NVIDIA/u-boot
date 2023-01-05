@@ -154,6 +154,7 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 	printf("TestItems as below:\n");
 	printf("x: auto test\n");
 	printf("a: PRBS7\n");
+	printf("g: D10.2\n");
 	printf("Press ESC key to leave test ...\n\n");
 
 	// While for auto testing
@@ -270,6 +271,11 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 				case 'a':
 					flag = (F_EMPHASIS_NULL | F_PAT_PRBS7);
 					break;
+
+				case 'g': /* D10.2 */
+					flag = (F_EMPHASIS_1 | F_PAT_D10_2);
+					break;
+
 #ifdef INTERNAL
 				case 'b':
 					flag = (F_EMPHASIS_1 | F_PAT_PRBS7);
@@ -289,10 +295,6 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 
 				case 'f': /* Non-Transition Voltage Range Measurement - PRBS7 */
 					flag = (F_EMPHASIS | F_PAT_PRBS7);
-					break;
-
-				case 'g': /* Total - PRBS7 */
-					flag = (F_EMPHASIS_1 | F_PAT_D10_2);
 					break;
 
 				case 'h':
