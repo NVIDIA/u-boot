@@ -917,11 +917,11 @@ static int ast2600_sdrammc_probe(struct udevice *dev)
 #ifdef AST2600_SDRAMMC_MANUAL_CLK
 	reg = readl(priv->scu + AST_SCU_MPLL);
 	reg &= ~(BIT(24) | GENMASK(22, 0));
-	reg |= (BIT(25) | BIT(23) | SCU_MPLL_FREQ_CFG);
+	reg |= (BIT(25) | SCU_MPLL_FREQ_CFG);
 	writel(reg, priv->scu + AST_SCU_MPLL);
 	writel(SCU_MPLL_EXT_CFG, priv->scu + AST_SCU_MPLL_EXT);
 	udelay(100);
-	reg &= ~(BIT(25) | BIT(23));
+	reg &= ~BIT(25);
 	writel(reg, priv->scu + AST_SCU_MPLL);
 	while (0 == (readl(priv->scu + AST_SCU_MPLL_EXT) & BIT(31)))
 		;

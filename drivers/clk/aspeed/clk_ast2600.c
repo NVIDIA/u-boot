@@ -758,7 +758,7 @@ static u32 ast2600_configure_pll(struct ast2600_scu *scu,
 	}
 
 	p_cfg->reg.b.bypass = 0;
-	p_cfg->reg.b.off = 1;
+	p_cfg->reg.b.off = 0;
 	p_cfg->reg.b.reset = 1;
 
 	reg = readl(addr);
