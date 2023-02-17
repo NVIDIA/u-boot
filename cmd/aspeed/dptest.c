@@ -17,11 +17,11 @@
 /* Version info*/
 #define MAINVER		0
 #define SUBVER			3
-#define TEMPVER			2
+#define TEMPVER			3
 
-#define YEAR	2022
-#define MONTH	07
-#define DAY		11
+#define YEAR	2023
+#define MONTH	02
+#define DAY		17
 
 /* Compile define */
 /* #define RE_DRIVER */
@@ -96,7 +96,7 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 	Deemphasis_Level	= DP_DEEMP_0;
 	Deemphasis_Level_1	= DP_DEEMP_2;
 	Swing_Level		= 2;
-	SSCG			= DP_SSCG_ON;
+	SSCG			= DP_SSCG_OFF;
 	SSC_SHIFT		= 1;
 
 	/* Obtain the argc / argv */
@@ -149,6 +149,8 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 	printf("4: DE_LVL = 0, DE_LVL_1 = 0\n");
 	printf("5: DE_LVL = 2, DE_LVL_1 = 1\n");
 #endif
+	printf("6: SSC shift -80ppm\n");
+	printf("7: SSC shift -120ppm\n");
 	printf("!: Show configs\n\n");
 
 	printf("TestItems as below:\n");
@@ -241,8 +243,7 @@ do_ast_dptest(cmd_tbl_t *cmdtp, int flags, int argc, char *const argv[])
 				if (execute_test) {
 					printf("Apply SSCG into current measurement !\n\n");
 					TX_SSCG_Cfg = DP_TX_RDY_TEST;
-					/* TX_SSCG_Cfg |= SSCG; */
-					TX_SSCG_Cfg |= DP_SSCG_ON;
+					TX_SSCG_Cfg |= SSCG;
 					writel(TX_SSCG_Cfg, DP_TX_PHY_SET);
 				}
 			} else {
@@ -1230,11 +1231,16 @@ void Apply_Main_Mesument(int flag)
 	else if (flag & F_PAT_D10_2)
 		Set_D10_1();
 
-	/* ssc special patch */
-	if (flag & F_PAT_D10_2) {
+	// ssc only used if D10.2
+	if ((flag & F_PAT_D10_2) == 0) {
+		TX_SSCG_Cfg &= ~DP_SSCG_ON;
+		printf("SSC isn't on for pattern other than D10.2\n");
+	}
+
+	// ssc shift only used if ssc on
+	if (TX_SSCG_Cfg & DP_SSCG_ON) {
 		/*Apply special patch*/
 		writel(SSC_SHIFT << 10, DP_TX_RES_CFG);
-		TX_SSCG_Cfg |= DP_SSCG_ON;
 	} else {
 		/*Recover into original setting*/
 		writel(0x00000000, DP_TX_RES_CFG);
@@ -1348,6 +1354,9 @@ void DPPHY_Set(void)
 	}
 }
 
+// Show and update cfg for registers
+//  DP_TX_PHY_CFG: PHY_Cfg and PHY_Cfg_1 are used here by condition
+//  DP_TX_PHY_SET: TX_SSCG_Cfg used here
 char DPPHYTX_Show_Cfg(void)
 {
 	char SetFail = 0;
@@ -1439,11 +1448,12 @@ char DPPHYTX_Show_Cfg(void)
 
 	switch (SSCG) {
 	case DP_SSCG_ON:
-		/*PRINT_SSCG_ON;*/
+		PRINT_SSCG_ON;
+		printf("SSC shift -%d ppm\n", SSC_SHIFT * 40);
 		break;
 
 	case DP_SSCG_OFF:
-		/*PRINT_SSCG_OFF;*/
+		PRINT_SSCG_OFF;
 		break;
 
 	default:
@@ -1452,8 +1462,7 @@ char DPPHYTX_Show_Cfg(void)
 		SetFail = 1;
 		break;
 	}
-	/* TX_SSCG_Cfg |= SSCG; */
-	TX_SSCG_Cfg |= DP_SSCG_ON;
+	TX_SSCG_Cfg |= SSCG;
 
 	printf("\n");
 
