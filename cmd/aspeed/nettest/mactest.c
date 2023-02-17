@@ -1162,7 +1162,11 @@ static uint32_t parse_arg_ncsi(int argc, char *const argv[], MAC_ENGINE *p_eng)
 
 static void disable_wdt(MAC_ENGINE *p_eng)
 {
-	/* FIXME */
+#ifdef CONFIG_ASPEED_AST2600
+	writel(0, 0x1e620064);
+#else
+	writel(0, 0x1e78502c);
+#endif
 	return;
 }
 
