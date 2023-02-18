@@ -1148,6 +1148,81 @@ read_err:
 	return ret;
 }
 
+#if CONFIG_IS_ENABLED(SPI_FLASH_SFDP_SUPPORT)
+static int sst_read_nvcr(struct spi_nor *nor)
+{
+	int ret;
+	int val;
+
+	ret = nor->read_reg(nor, SPINOR_OP_SST_RDNVCR, (u8 *)&val, 2);
+	if (ret < 0) {
+		dev_err(nor->dev, "SST error %d while reading CR\n", ret);
+		return ret;
+	}
+
+	return val;
+}
+
+static int sst_write_nvcr(struct spi_nor *nor, int val)
+{
+	int ret;
+
+	write_enable(nor);
+
+	nor->cmd_buf[0] = val & 0xff;
+	nor->cmd_buf[1] = (val >> 8) & 0xff;
+
+	ret = nor->write_reg(nor, SPINOR_OP_SST_WRNVCR, nor->cmd_buf, 2);
+	if (ret < 0) {
+		dev_err(nor->dev,
+			"SST error while writing configuration register\n");
+		return -EINVAL;
+	}
+
+	ret = spi_nor_wait_till_ready(nor);
+	if (ret) {
+		dev_err(nor->dev,
+			"SST timeout while writing configuration register\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int sst_cr_quad_enable(struct spi_nor *nor)
+{
+	int ret;
+
+	/* Check current Quad Enable bit value. */
+	ret = sst_read_nvcr(nor);
+	if (ret < 0) {
+		dev_dbg(nor->dev, "SST error while reading nonvolatile configuration register\n");
+		return -EINVAL;
+	}
+
+	if ((ret & SPINOR_SST_RST_HOLD_CTRL) == 0)
+		return 0;
+
+	/* Nonvolatile Configuration Register bit 4 */
+	ret &= ~SPINOR_SST_RST_HOLD_CTRL;
+
+	/* Keep the current value of the Status Register. */
+	ret = sst_write_nvcr(nor, ret);
+	if (ret < 0) {
+		dev_err(nor->dev, "SST error while writing nonvolatile configuration register\n");
+		return -EINVAL;
+	}
+
+	ret = sst_read_nvcr(nor);
+	if (ret > 0 && (ret & SPINOR_SST_RST_HOLD_CTRL)) {
+		dev_err(nor->dev, "SST Quad bit not set\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_SPI_FLASH_SST
 static int sst_write_byteprogram(struct spi_nor *nor, loff_t to, size_t len,
 				 size_t *retlen, const u_char *buf)
@@ -2089,6 +2164,9 @@ static int spi_nor_parse_bfpt(struct spi_nor *nor,
 	/* Quad Enable Requirements. */
 	switch (bfpt.dwords[BFPT_DWORD(15)] & BFPT_DWORD15_QER_MASK) {
 	case BFPT_DWORD15_QER_NONE:
+		params->quad_enable = sst_cr_quad_enable;
+		break;
+	case BFPT_DWORD15_QER_NONE_111:
 		params->quad_enable = NULL;
 		break;
 #if defined(CONFIG_SPI_FLASH_SPANSION) || defined(CONFIG_SPI_FLASH_WINBOND)
