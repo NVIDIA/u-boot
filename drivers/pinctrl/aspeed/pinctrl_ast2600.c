@@ -164,7 +164,6 @@ static struct aspeed_sig_desc rgmii4[] = {
 	{ 0x510, BIT(1), 0         },
 	{ 0x410, GENMASK(31, 28), 1	},
 	{ 0x4b0, GENMASK(31, 28), 0	},
-	{ 0x474, GENMASK(7, 0), 1	},
 	{ 0x414, GENMASK(7, 0), 1	},
 	{ 0x4b4, GENMASK(7, 0), 0	},
 };
