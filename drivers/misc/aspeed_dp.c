@@ -3,6 +3,7 @@
  * Copyright (C) ASPEED Technology Inc.
  */
 
+#include <linux/bitfield.h>
 #include <common.h>
 #include <clk.h>
 #include <dm.h>
@@ -11,6 +12,27 @@
 #include <fdtdec.h>
 #include <asm/io.h>
 #include "dp_mcu_firmware.h"
+
+#define MCU_CTRL                        0x180100e0
+#define  MCU_CTRL_AHBS_IMEM_EN          BIT(0)
+#define  MCU_CTRL_AHBS_SW_RST           BIT(4)
+#define  MCU_CTRL_AHBM_SW_RST           BIT(8)
+#define  MCU_CTRL_CORE_SW_RST           BIT(12)
+#define  MCU_CTRL_DMEM_SHUT_DOWN        BIT(16)
+#define  MCU_CTRL_DMEM_SLEEP            BIT(17)
+#define  MCU_CTRL_DMEM_CLK_OFF          BIT(18)
+#define  MCU_CTRL_IMEM_SHUT_DOWN        BIT(20)
+#define  MCU_CTRL_IMEM_SLEEP            BIT(21)
+#define  MCU_CTRL_IMEM_CLK_OFF          BIT(22)
+#define  MCU_CTRL_IMEM_SEL              BIT(24)
+#define  MCU_CTRL_CONFIG                BIT(28)
+
+#define MCU_INTR_CTRL                   0x180100e8
+#define  MCU_INTR_CTRL_CLR              GENMASK(7, 0)
+#define  MCU_INTR_CTRL_MASK             GENMASK(15, 8)
+#define  MCU_INTR_CTRL_EN               GENMASK(23, 16)
+
+#define MCU_IMEM_START                  0x18020000
 
 struct aspeed_dp_priv {
 	void *ctrl_base;
