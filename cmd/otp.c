@@ -2207,7 +2207,7 @@ static int otp_prog_bit(int mode, int otp_dw_offset, int bit_offset, int value, 
 			return OTP_SUCCESS;
 		}
 
-		printf("Program OTPDATA0x%X[0x%X] to 1\n", otp_dw_offset, bit_offset);
+		printf("Program OTPDATA0x%X[0x%X] to %d\n", otp_dw_offset, bit_offset, value);
 		break;
 	case OTP_REGION_STRAP:
 		otp_strap_status(otpstrap);
