@@ -112,6 +112,10 @@ ENTRY(_main)
 #endif
 	sub	r1, r0
 	add	lr, r1
+
+	ldr	r0, [r9, #GD_ENV_ADDR]		/* r0 = gd->env_addr */
+	add	r0, r0, r1
+	str	r0, [r9, #GD_ENV_ADDR]
 #endif
 	ldr	r0, [r9, #GD_RELOC_OFF]		/* r0 = gd->reloc_off */
 	add	lr, lr, r0
