@@ -63,11 +63,12 @@
 &wdt3 {
 	status = "okay";
 };
-&mac2 {
+
+&mac0 {
 	status = "okay";
 	phy-mode = "rgmii";
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_rgmii3_default &pinctrl_mac3link_default>;
+	pinctrl-0 = <&pinctrl_rgmii1_default &pinctrl_mac1link_default>;
         fixed-link {
 		speed = <1000>;
 		full-duplex;
@@ -166,6 +167,14 @@
 
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c11_default>;
+	eeprom@50 {
+		compatible = "atmel,24c02";
+		reg = <0x50>;
+		pagesize = <8>;
+		/* Enable offset, If have exact mac offset, And MAC is not
+		   stored with colon ":" */
+		/* ethmacoffset = <0x49 0xff 0xff 0xff 0xff 0xff>; */
+	};
 };
 
 &i2c14 {
