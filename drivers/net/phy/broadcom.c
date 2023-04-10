@@ -371,6 +371,16 @@ static struct phy_driver BCM54612_driver = {
 	.shutdown = &genphy_shutdown,
 };
 
+static struct phy_driver BCM54210E_driver = {
+	.name = "Broadcom BCM54210E",
+	.uid = 0x600d84a0,
+	.mask = 0xfffffff0,
+	.features = PHY_GBIT_FEATURES,
+	.config = &bcm5461_config,
+	.startup = &bcm54xx_startup,
+	.shutdown = &genphy_shutdown,
+};
+
 static struct phy_driver BCM5461S_driver = {
 	.name = "Broadcom BCM5461S",
 	.uid = 0x2060c0,
@@ -415,6 +425,7 @@ int phy_broadcom_init(void)
 {
 	phy_register(&BCM54616S_driver);
 	phy_register(&BCM54612_driver);
+	phy_register(&BCM54210E_driver);
 	phy_register(&BCM5482S_driver);
 	phy_register(&BCM5464S_driver);
 	phy_register(&BCM5461S_driver);
