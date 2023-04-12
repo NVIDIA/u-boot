@@ -401,6 +401,23 @@
 				};
 			};
 
+			pcie_phy0: phy@1e6ed000 {
+				compatible = "aspeed,ast2600-pcie_phy";
+				reg = <0x1e6ed000 0x100>;
+				resets = <&rst ASPEED_RESET_PCIE_DEV_O>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&pinctrl_pcie0rc_default>;
+				status = "disabled";
+			};
+
+			pcie_phy1: phy@1e6ed200 {
+				compatible = "aspeed,ast2600-pcie_phy";
+				reg = <0x1e6ed200 0x100>;
+				resets = <&rst ASPEED_RESET_PCIE_RC_O>;
+				pinctrl-names = "default";
+				pinctrl-0 = <&pinctrl_pcie1rc_default>;
+				status = "disabled";
+			};
 
 			pcie_rc_bridge0: pcie@1e6ed000 {
 				compatible = "aspeed,ast2600-rc_bridge";
