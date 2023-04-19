@@ -183,6 +183,82 @@ struct aspeed_spi_flash {
 	struct spi_flash *spi; /* Associated SPI Flash device */
 };
 
+enum aspeed_spi_dir {
+	ASPEED_SPI_DIR_IN,
+	ASPEED_SPI_DIR_OUT,
+};
+
+#define ASPEED_SPI_OP_CMD(__opcode)				\
+	{							\
+		.opcode = __opcode,				\
+	}
+
+#define ASPEED_SPI_OP_ADDR(__nbytes, __val)			\
+	{							\
+		.nbytes = __nbytes,				\
+		.val = __val,					\
+	}
+
+#define ASPEED_SPI_OP_NO_ADDR	{ }
+
+#define ASPEED_SPI_OP_DUMMY(__nbytes)				\
+	{							\
+		.nbytes = __nbytes,				\
+	}
+
+#define ASPEED_SPI_OP_NO_DUMMY	{ }
+
+#define ASPEED_SPI_OP_DATA_IN(__nbytes, __buf)			\
+	{							\
+		.dir = ASPEED_SPI_DIR_IN,				\
+		.nbytes = __nbytes,				\
+		.buf.in = __buf,				\
+	}
+
+#define ASPEED_SPI_OP_DATA_OUT(__nbytes, __buf)			\
+	{							\
+		.dir = ASPEED_SPI_DIR_OUT,				\
+		.nbytes = __nbytes,				\
+		.buf.out = __buf,				\
+	}
+
+#define ASPEED_SPI_OP_NO_DATA	{ }
+
+#define ASPEED_SPI_OP(__io_mode, __cmd, __addr, __dummy, __data)	\
+	{							\
+		.io_mode = __io_mode,				\
+		.cmd = __cmd,					\
+		.addr = __addr,					\
+		.dummy = __dummy,				\
+		.data = __data,					\
+	}
+
+struct aspeed_spi_op {
+	u32 io_mode;
+
+	struct {
+		u16 opcode;
+	} cmd;
+
+	struct {
+		u8 nbytes;
+		u32 val;
+	} addr;
+
+	struct {
+		u8 nbytes;
+	} dummy;
+
+	struct {
+		enum aspeed_spi_dir dir;
+		unsigned int nbytes;
+		union {
+			void *in;
+			const void *out;
+		} buf;
+	} data;
+};
+
 struct aspeed_spi_priv {
 	struct aspeed_spi_regs *regs;
 	void __iomem *ahb_base; /* AHB Window for all flash devices */
@@ -197,7 +273,14 @@ struct aspeed_spi_priv {
 
 	u8 cmd_buf[16]; /* SPI command in progress */
 	size_t cmd_len;
+	u8 *tmp_buf;
+	int (*spi_exec_op_cmd)(struct aspeed_spi_priv *priv,
+			       struct aspeed_spi_flash *flash,
+			       struct aspeed_spi_op *op);
 };
+
+static u32 aspeed_spi_flash_to_addr(struct aspeed_spi_flash *flash,
+				    const u8 *cmdbuf, unsigned int cmdlen);
 
 static struct aspeed_spi_flash *aspeed_spi_get_flash(struct udevice *dev)
 {
@@ -708,6 +791,18 @@ static int aspeed_spi_read_reg(struct aspeed_spi_priv *priv,
 			       struct aspeed_spi_flash *flash,
 			       u8 opcode, u8 *read_buf, int len)
 {
+	struct aspeed_spi_op op =
+		ASPEED_SPI_OP(0,
+			      ASPEED_SPI_OP_CMD(opcode),
+			      ASPEED_SPI_OP_ADDR(0, 0),
+			      ASPEED_SPI_OP_DUMMY(0),
+			      ASPEED_SPI_OP_DATA_IN(len, read_buf));
+
+	if (priv->spi_exec_op_cmd) {
+		priv->spi_exec_op_cmd(priv, flash, &op);
+		return 0;
+	}
+
 	aspeed_spi_start_user(priv, flash);
 	aspeed_spi_write_to_ahb(flash->ahb_base, &opcode, 1);
 	aspeed_spi_read_from_ahb(flash->ahb_base, read_buf, len);
@@ -720,7 +815,6 @@ static int aspeed_spi_write_reg(struct aspeed_spi_priv *priv,
 				struct aspeed_spi_flash *flash,
 				u8 opcode, const u8 *write_buf, int len)
 {
-	int i;
 	struct aspeed_spi_op op =
 		ASPEED_SPI_OP(0,
 			      ASPEED_SPI_OP_CMD(opcode),
@@ -729,14 +823,6 @@ static int aspeed_spi_write_reg(struct aspeed_spi_priv *priv,
 			      ASPEED_SPI_OP_DATA_OUT(len, write_buf));
 
 	if (priv->spi_exec_op_cmd) {
-		if (opcode == SPINOR_OP_BE_4K || opcode == SPINOR_OP_BE_4K_4B ||
-		    opcode == SPINOR_OP_BE_32K || opcode == SPINOR_OP_BE_32K_4B ||
-		    opcode == SPINOR_OP_SE || opcode == SPINOR_OP_SE_4B) {
-			op.addr.nbytes = len;
-			op.addr.val = aspeed_spi_flash_to_addr(flash, write_buf, len + 1);
-			op.data.nbytes = 0;
-		}
-
 		priv->spi_exec_op_cmd(priv, flash, &op);
 		return 0;
 	}
@@ -793,6 +879,19 @@ static ssize_t aspeed_spi_read_user(struct aspeed_spi_priv *priv,
 {
 	u8 dummy = 0x00;
 	int i;
+	struct aspeed_spi_op op =
+		ASPEED_SPI_OP(flash->read_iomode,
+			      ASPEED_SPI_OP_CMD(cmdbuf[0]),
+			      ASPEED_SPI_OP_ADDR(0, 0),
+			      ASPEED_SPI_OP_DUMMY(flash->spi->read_dummy / 8),
+			      ASPEED_SPI_OP_DATA_IN(len, read_buf));
+
+	if (priv->spi_exec_op_cmd) {
+		op.addr.nbytes = cmdlen - 1 - op.dummy.nbytes;
+		op.addr.val = aspeed_spi_flash_to_addr(flash, cmdbuf, op.addr.nbytes + 1);
+		priv->spi_exec_op_cmd(priv, flash, &op);
+		return 0;
+	}
 
 	aspeed_spi_start_user(priv, flash);
 
@@ -822,6 +921,18 @@ static ssize_t aspeed_spi_read_sfdp(struct aspeed_spi_priv *priv,
 {
 	u8 dummy = 0x00;
 	int i;
+	struct aspeed_spi_op op =
+		ASPEED_SPI_OP(flash->read_iomode,
+			      ASPEED_SPI_OP_CMD(cmdbuf[0]),
+			      ASPEED_SPI_OP_ADDR(0, 3),
+			      ASPEED_SPI_OP_DUMMY(flash->spi->read_dummy / 8),
+			      ASPEED_SPI_OP_DATA_IN(len, read_buf));
+
+	if (priv->spi_exec_op_cmd) {
+		op.addr.val = aspeed_spi_flash_to_addr(flash, cmdbuf, op.addr.nbytes + 1);
+		priv->spi_exec_op_cmd(priv, flash, &op);
+		return 0;
+	}
 
 	/* only 1-1-1 mode is used to read SFDP */
 	aspeed_spi_start_user(priv, flash);
@@ -844,6 +955,20 @@ static ssize_t aspeed_spi_write_user(struct aspeed_spi_priv *priv,
 				     unsigned int cmdlen, const u8 *cmdbuf,
 				     unsigned int len,	const u8 *write_buf)
 {
+	struct aspeed_spi_op op =
+		ASPEED_SPI_OP(flash->write_iomode,
+			      ASPEED_SPI_OP_CMD(cmdbuf[0]),
+			      ASPEED_SPI_OP_ADDR(0, 0),
+			      ASPEED_SPI_OP_DUMMY(0),
+			      ASPEED_SPI_OP_DATA_OUT(len, write_buf));
+
+	if (priv->spi_exec_op_cmd) {
+		op.addr.nbytes = cmdlen - 1;
+		op.addr.val = aspeed_spi_flash_to_addr(flash, cmdbuf, op.addr.nbytes + 1);
+		priv->spi_exec_op_cmd(priv, flash, &op);
+		return 0;
+	}
+
 	aspeed_spi_start_user(priv, flash);
 
 	/* cmd buffer = cmd + addr : normally cmd is use signle mode*/
@@ -885,6 +1010,19 @@ static ssize_t aspeed_spi_read(struct aspeed_spi_priv *priv,
 	/* cmd buffer = cmd + addr + dummies */
 	u32 offset = aspeed_spi_flash_to_addr(flash, cmdbuf,
 					      cmdlen - (flash->spi->read_dummy/8));
+	struct aspeed_spi_op op =
+		ASPEED_SPI_OP(flash->read_iomode,
+			      ASPEED_SPI_OP_CMD(cmdbuf[0]),
+			      ASPEED_SPI_OP_ADDR(0, 0),
+			      ASPEED_SPI_OP_DUMMY(flash->spi->read_dummy / 8),
+			      ASPEED_SPI_OP_DATA_IN(len, read_buf));
+
+	if (priv->spi_exec_op_cmd) {
+		op.addr.nbytes = cmdlen - 1 - op.dummy.nbytes;
+		op.addr.val = aspeed_spi_flash_to_addr(flash, cmdbuf, op.addr.nbytes + 1);
+		priv->spi_exec_op_cmd(priv, flash, &op);
+		return 0;
+	}
 
 	/*
 	 * Switch to USER command mode:
@@ -902,6 +1040,104 @@ static ssize_t aspeed_spi_read(struct aspeed_spi_priv *priv,
 	}
 
 	memcpy_fromio(read_buf, flash->ahb_base + offset, len);
+
+	return 0;
+}
+
+int aspeed_spi_exec_op_cmd_mode(struct aspeed_spi_priv *priv,
+				struct aspeed_spi_flash *flash,
+				struct aspeed_spi_op *op)
+{
+	uint32_t cs = flash->cs;
+	uint32_t ctrl_val;
+	uint32_t addr_mode_reg, addr_mode_reg_backup;
+	uint32_t addr_data_mask = 0;
+	void __iomem *op_addr;
+	const void *data_buf;
+	uint32_t data_byte = 0;
+	uint32_t dummy_data = 0;
+
+	debug("iomode: %08x, cmd:%02x, addr:%08x, dummy:%d, data_len:%x, dir: %s\n",
+	      op->io_mode, op->cmd.opcode, op->addr.val, op->dummy.nbytes,
+	      op->data.nbytes, op->data.dir == ASPEED_SPI_DIR_IN ? "in" : "out");
+
+	addr_mode_reg = readl(&priv->regs->ctrl);
+	addr_mode_reg_backup = addr_mode_reg;
+	addr_data_mask = readl(&priv->regs->cmd_ctrl);
+
+	ctrl_val = flash->ce_ctrl_fread & (~0xf0ff40c7);
+	ctrl_val |= op->io_mode;
+	/* configure opcode */
+	ctrl_val |= op->cmd.opcode << 16;
+
+	/* configure operation address, address length and address mask */
+	if (op->addr.nbytes != 0) {
+		if (op->addr.nbytes == 3)
+			addr_mode_reg &= ~(0x11 << cs);
+		else
+			addr_mode_reg |= (0x11 << cs);
+
+		addr_data_mask &= 0x0f;
+		op_addr = flash->ahb_base + op->addr.val;
+	} else {
+		addr_data_mask |= 0xf0;
+		op_addr = flash->ahb_base;
+	}
+
+	if (op->dummy.nbytes != 0) {
+		ctrl_val |= ((op->dummy.nbytes & 0x3) << 6 |
+			     ((op->dummy.nbytes & 0x4) >> 2) << 14);
+	}
+
+	/* configure data io mode and data mask */
+	if (op->data.nbytes != 0) {
+		addr_data_mask &= 0xF0;
+		if (op->data.nbytes < 4)
+			addr_data_mask |= ~((1 << op->data.nbytes) - 1);
+
+		data_byte = op->data.nbytes;
+		if (op->data.dir == ASPEED_SPI_DIR_OUT) {
+			if (data_byte % 4 != 0) {
+				memset(priv->tmp_buf, 0xff, ((data_byte / 4) + 1) * 4);
+				memcpy(priv->tmp_buf, op->data.buf.out, data_byte);
+				data_buf = priv->tmp_buf;
+				data_byte = ((data_byte / 4) + 1) * 4;
+			} else {
+				data_buf = op->data.buf.out;
+			}
+		} else {
+			data_buf = op->data.buf.in;
+		}
+	} else {
+		addr_data_mask |= 0x0f;
+		data_byte = 1;
+		data_buf = &dummy_data;
+	}
+
+	/* configure command mode */
+	if (op->data.dir == ASPEED_SPI_DIR_OUT)
+		ctrl_val |= CE_CTRL_WRITEMODE;
+	else
+		ctrl_val |= CE_CTRL_FREADMODE;
+
+	/* set controller registers */
+	writel(ctrl_val, &priv->regs->ce_ctrl[cs]);
+	writel(addr_mode_reg, &priv->regs->ctrl);
+	writel(addr_data_mask, &priv->regs->cmd_ctrl);
+
+	debug("ctrl: 0x%08x, addr_mode: 0x%x, mask: 0x%x, addr:0x%08x\n",
+	      ctrl_val, addr_mode_reg, addr_data_mask, (uint32_t)op_addr);
+
+	/* trigger spi transmission or reception sequence */
+	if (op->data.dir == ASPEED_SPI_DIR_OUT)
+		memcpy_toio(op_addr, data_buf, data_byte);
+	else
+		memcpy_fromio((void *)data_buf, op_addr, data_byte);
+
+	/* restore controller setting */
+	writel(flash->ce_ctrl_fread, &priv->regs->ce_ctrl[cs]);
+	writel(addr_mode_reg_backup, &priv->regs->ctrl);
+	writel(0x0, &priv->regs->cmd_ctrl);
 
 	return 0;
 }
@@ -1421,35 +1657,39 @@ static int aspeed_spi_flash_init(struct aspeed_spi_priv *priv,
 		read_hclk = aspeed_spi_hclk_divisor(priv, slave->speed);
 
 	switch(flash->spi->read_opcode) {
-		case SPINOR_OP_READ_1_1_2:
-		case SPINOR_OP_READ_1_1_2_4B:
-			flash->read_iomode = CE_CTRL_IO_DUAL_DATA;
-			break;
-		case SPINOR_OP_READ_1_1_4:
-		case SPINOR_OP_READ_1_1_4_4B:
-			flash->read_iomode = CE_CTRL_IO_QUAD_DATA;
-			break;
-		case SPINOR_OP_READ_1_4_4:
-		case SPINOR_OP_READ_1_4_4_4B:
-			flash->read_iomode = CE_CTRL_IO_QUAD_ADDR_DATA;
-			printf("need modify dummy for 3 bytes\n");
-			break;
+	case SPINOR_OP_READ:
+	case SPINOR_OP_READ_4B:
+		flash->read_iomode = CE_CTRL_IO_SINGLE;
+		break;
+	case SPINOR_OP_READ_1_1_2:
+	case SPINOR_OP_READ_1_1_2_4B:
+		flash->read_iomode = CE_CTRL_IO_DUAL_DATA;
+		break;
+	case SPINOR_OP_READ_1_1_4:
+	case SPINOR_OP_READ_1_1_4_4B:
+		flash->read_iomode = CE_CTRL_IO_QUAD_DATA;
+		break;
+	case SPINOR_OP_READ_1_4_4:
+	case SPINOR_OP_READ_1_4_4_4B:
+		flash->read_iomode = CE_CTRL_IO_QUAD_ADDR_DATA;
+		printf("need modify dummy for 3 bytes\n");
+		break;
 	}
 
 	switch(flash->spi->program_opcode) {
-		case SPINOR_OP_PP:
-		case SPINOR_OP_PP_4B:
-			flash->write_iomode = CE_CTRL_IO_SINGLE;
-			break;
-		case SPINOR_OP_PP_1_1_4:
-		case SPINOR_OP_PP_1_1_4_4B:
-			flash->write_iomode = CE_CTRL_IO_QUAD_DATA;
-			break;
-		case SPINOR_OP_PP_1_4_4:
-		case SPINOR_OP_PP_1_4_4_4B:
-			flash->write_iomode = CE_CTRL_IO_QUAD_ADDR_DATA;
-			printf("need modify dummy for 3 bytes");
-			break;
+	case SPINOR_OP_PP:
+	case SPINOR_OP_PP_4B:
+		flash->write_iomode = CE_CTRL_IO_SINGLE;
+		break;
+	case SPINOR_OP_PP_1_1_4:
+	case SPINOR_OP_PP_1_1_4_4B:
+		flash->write_iomode = CE_CTRL_IO_QUAD_DATA;
+		break;
+	case SPINOR_OP_PP_1_4_4:
+	case SPINOR_OP_PP_1_4_4_4B:
+		flash->write_iomode = CE_CTRL_IO_QUAD_ADDR_DATA;
+		printf("need modify dummy for 3 bytes");
+		break;
 	}
 
 	if(priv->new_ver) {
@@ -1618,6 +1858,14 @@ static int aspeed_spi_probe(struct udevice *bus)
 	if (device_is_compatible(bus, "aspeed,ast2600-fmc") || 
 			device_is_compatible(bus, "aspeed,ast2600-spi")) {
 		priv->new_ver = 1;
+	}
+
+	if (dev_read_bool(bus, "aspeed-spi-command-mode")) {
+		debug("adopt command mode\n");
+		priv->tmp_buf = memalign(4, 512);
+		priv->spi_exec_op_cmd = aspeed_spi_exec_op_cmd_mode;
+	} else {
+		priv->spi_exec_op_cmd = NULL;
 	}
 
 	/*
