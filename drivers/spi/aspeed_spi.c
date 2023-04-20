@@ -823,6 +823,14 @@ static int aspeed_spi_write_reg(struct aspeed_spi_priv *priv,
 			      ASPEED_SPI_OP_DATA_OUT(len, write_buf));
 
 	if (priv->spi_exec_op_cmd) {
+		if (opcode == SPINOR_OP_BE_4K || opcode == SPINOR_OP_BE_4K_4B ||
+		    opcode == SPINOR_OP_BE_32K || opcode == SPINOR_OP_BE_32K_4B ||
+		    opcode == SPINOR_OP_SE || opcode == SPINOR_OP_SE_4B) {
+			op.addr.nbytes = len;
+			op.addr.val = aspeed_spi_flash_to_addr(flash, write_buf, len + 1);
+			op.data.nbytes = 0;
+		}
+
 		priv->spi_exec_op_cmd(priv, flash, &op);
 		return 0;
 	}
