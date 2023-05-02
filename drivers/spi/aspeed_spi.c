@@ -720,6 +720,30 @@ static int aspeed_spi_write_reg(struct aspeed_spi_priv *priv,
 				struct aspeed_spi_flash *flash,
 				u8 opcode, const u8 *write_buf, int len)
 {
+	int i;
+	struct aspeed_spi_op op =
+		ASPEED_SPI_OP(0,
+			      ASPEED_SPI_OP_CMD(opcode),
+			      ASPEED_SPI_OP_ADDR(0, 0),
+			      ASPEED_SPI_OP_DUMMY(0),
+			      ASPEED_SPI_OP_DATA_OUT(len, write_buf));
+
+	if (priv->spi_exec_op_cmd) {
+		if (opcode == SPINOR_OP_BE_4K || opcode == SPINOR_OP_BE_4K_4B ||
+		    opcode == SPINOR_OP_BE_32K || opcode == SPINOR_OP_BE_32K_4B ||
+		    opcode == SPINOR_OP_SE || opcode == SPINOR_OP_SE_4B) {
+			op.addr.nbytes = len;
+			for (i = 0; i < len; i++) {
+				op.addr.val <<= 8;
+				op.addr.val |= (u32)write_buf[i];
+			}
+			op.data.nbytes = 0;
+		}
+
+		priv->spi_exec_op_cmd(priv, flash, &op);
+		return 0;
+	}
+
 	aspeed_spi_start_user(priv, flash);
 	aspeed_spi_write_to_ahb(flash->ahb_base, &opcode, 1);
 	aspeed_spi_write_to_ahb(flash->ahb_base, write_buf, len);
