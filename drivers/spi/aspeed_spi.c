@@ -37,14 +37,17 @@ struct aspeed_spi_regs {
 	u32 dma_len;			/* 0x8c DMA Length Register */
 	u32 dma_checksum;		/* 0x90 Checksum Calculation Result */
 	u32 timings;			/* 0x94 Read Timing Compensation */
-
+	u32 _reserved3[1];
 	/* not used */
 	u32 soft_strap_status;		/* 0x9c Software Strap Status */
 	u32 write_cmd_filter_ctrl;	/* 0xa0 Write Command Filter Control */
 	u32 write_addr_filter_ctrl;	/* 0xa4 Write Address Filter Control */
 	u32 lock_ctrl_reset;		/* 0xa8 Lock Control (SRST#) */
 	u32 lock_ctrl_wdt;		/* 0xac Lock Control (Watchdog) */
-	u32 write_addr_filter[5];	/* 0xb0 Write Address Filter */
+	u32 write_addr_filter[8];	/* 0xb0 Write Address Filter */
+	u32 _reserved4[12];
+	u32 fully_qualified_cmd[20];	/* 0x100 Fully Qualified Command */
+	u32 addr_qualified_cmd[12];	/* 0x150 Address Qualified Command */
 };
 
 /* CE Type Setting Register */
@@ -956,6 +959,296 @@ static int aspeed_spi_xfer(struct udevice *dev, unsigned int bitlen,
 
 	return err;
 }
+
+#ifdef CONFIG_ASPEED_SPI_FLASH_WRITE_PROTECTION
+static void aspeed_spi_fill_FQCD(struct aspeed_spi_priv *priv, u8 cmd)
+{
+	u32 reg_val;
+	u32 i;
+
+	for (i = 0; i < 20; i++) {
+		reg_val = readl(&priv->regs->fully_qualified_cmd[i]);
+		if ((u8)(reg_val & 0xff) == cmd ||
+		    (u8)((reg_val & 0xff00) >> 8) == cmd) {
+			if ((reg_val & 0x80000000) == 0x80000000) {
+				debug("cmd: %02x already exists in FQCD.\n", cmd);
+				return;
+			}
+		}
+	}
+
+	for (i = 0; i < 20; i++) {
+		reg_val = readl(&priv->regs->fully_qualified_cmd[i]);
+		if ((reg_val & 0x80000000) == 0x80000000) {
+			if ((u8)(reg_val & 0xff) == 0x0) {
+				reg_val |= (u32)cmd;
+				debug("[%d]fill %02x cmd in FQCD%02d.\n", __LINE__, cmd, i);
+				writel(reg_val, &priv->regs->fully_qualified_cmd[i]);
+				return;
+			} else if ((u8)((reg_val & 0xff00) >> 8) == 0x0) {
+				reg_val |= ((u32)cmd) << 8;
+				debug("[%d]fill %02x cmd in FQCD%02d.\n", __LINE__, cmd, i);
+				writel(reg_val, &priv->regs->fully_qualified_cmd[i]);
+				return;
+			}
+		}
+	}
+
+	for (i = 0; i < 20; i++) {
+		reg_val = readl(&priv->regs->fully_qualified_cmd[i]);
+		if (reg_val == 0) {
+			reg_val = 0x80000000 | (u32)cmd;
+			debug("[%d]fill %02x cmd in FQCD%02d.\n", __LINE__, cmd, i);
+			writel(reg_val, &priv->regs->fully_qualified_cmd[i]);
+			return;
+		}
+	}
+}
+
+static void aspeed_spi_fill_AQCD(struct aspeed_spi_priv *priv, u8 cmd, u8 addr_width)
+{
+	u32 reg_val;
+	u32 i;
+	u32 bit_offset;
+
+	if (addr_width != 3 && addr_width != 4) {
+		printf("wrong address width: %d.\n", addr_width);
+		return;
+	}
+
+	bit_offset = (addr_width - 3) * 8;
+
+	for (i = 0; i < 12; i++) {
+		reg_val = readl(&priv->regs->addr_qualified_cmd[i]);
+		if ((reg_val & 0x80000000) == 0x80000000) {
+			if ((u8)((reg_val & (0xff << bit_offset)) >> bit_offset) == cmd) {
+				debug("cmd: %02x already exists in AQCD.\n", cmd);
+				return;
+			}
+		}
+	}
+
+	for (i = 0; i < 12; i++) {
+		reg_val = readl(&priv->regs->addr_qualified_cmd[i]);
+		if ((reg_val & 0x80000000) == 0x80000000) {
+			if ((u8)((reg_val & (0xff << bit_offset)) >> bit_offset) == 0x0) {
+				reg_val |= ((u32)cmd << bit_offset);
+				debug("fill %02x cmd in AQCD%02d.\n", cmd, i);
+				writel(reg_val, &priv->regs->addr_qualified_cmd[i]);
+				return;
+			}
+		}
+
+		if (reg_val == 0) {
+			reg_val = 0x80000000 | ((u32)cmd << bit_offset);
+			debug("fill %02x cmd in AQCD%02d.\n", cmd, i);
+			writel(reg_val, &priv->regs->addr_qualified_cmd[i]);
+			return;
+		}
+	}
+}
+
+static void aspeed_spi_cmd_filter_config(struct aspeed_spi_priv *priv,
+					 u32 cs, bool enable)
+{
+	u32 reg_val;
+
+	reg_val = readl(&priv->regs->write_cmd_filter_ctrl);
+
+	if (enable)
+		reg_val |= BIT(cs);
+	else
+		reg_val &= ~BIT(cs);
+
+	writel(reg_val, &priv->regs->write_cmd_filter_ctrl);
+}
+
+static int aspeed_spi_write_addr_ftr_sanity(struct aspeed_spi_priv *priv,
+					    u32 offset, size_t len)
+{
+	u32 addr_ftr_ctrl;
+	u32 reg_val;
+	u32 start;
+	u32 end;
+	u32 i;
+
+	addr_ftr_ctrl = readl(&priv->regs->write_addr_filter_ctrl);
+	for (i = 0; i < 8; i++) {
+		if ((addr_ftr_ctrl & (0x3 << (i * 2))) == 0)
+			continue;
+		reg_val = readl(&priv->regs->write_addr_filter[i]);
+		start = (reg_val & 0xffff) << 12;
+		end = (((reg_val & 0xffff0000) >> 16) << 12) | 0xFFF;
+
+		if (offset >= start && offset < end)
+			return -1;
+		else if ((offset + len) > start && (offset + len) < end)
+			return -1;
+	}
+
+	return 0;
+}
+
+static int aspeed_add_write_addr_ftr(struct aspeed_spi_priv *priv,
+				     u32 offset, size_t len)
+{
+	u32 addr_ftr_ctrl;
+	u32 reg_val;
+	u32 start;
+	u32 end;
+	u32 i;
+
+	if ((offset & 0xfff) != 0) {
+		offset &= 0xfffff000;
+		printf("protected start address will be entend to 0x%08x.\n",
+		       offset);
+	}
+
+	if ((len & 0xfff) != 0) {
+		len &= 0xfff;
+		printf("protected len will be trimed to 0x%x.\n", len);
+	}
+
+	if (len == 0) {
+		printf("invalid protect len: 0x%x.\n", len);
+		return -1;
+	}
+
+	addr_ftr_ctrl = readl(&priv->regs->write_addr_filter_ctrl);
+	for (i = 0; i < 8; i++) {
+		if ((addr_ftr_ctrl & (0x3 << (i * 2))) == 0) {
+			start = offset;
+			end = offset + len - 1;
+
+			reg_val = (start >> 12) | ((end >> 12) << 16);
+
+			debug("start: 0x%08x, end: 0x%08x, val: 0x%08x.\n",
+			      start, end, reg_val);
+
+			writel(reg_val, &priv->regs->write_addr_filter[i]);
+			addr_ftr_ctrl |= 0x3 << (i * 2);
+			writel(addr_ftr_ctrl, &priv->regs->write_addr_filter_ctrl);
+
+			printf("apply write lock from offset, 0x%08x, with len, 0x%08x.\n",
+			       offset, (u32)len);
+
+			break;
+		}
+	}
+
+	if (i == 8) {
+		printf("insufficient write address filter register.\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int aspeed_remove_write_addr_ftr(struct aspeed_spi_priv *priv,
+					u32 offset, size_t len)
+{
+	u32 addr_ftr_ctrl;
+	u32 reg_val;
+	u32 bit_mask;
+	u32 start;
+	u32 end;
+	u32 i;
+
+	if ((offset & 0xfff) != 0) {
+		printf("start address should be aligned to 0x1000.\n");
+		return -1;
+	}
+
+	if ((len & 0xfff) != 0) {
+		printf("removed length should be aligned to 0x1000.\n");
+		return -1;
+	}
+
+	if (len == 0) {
+		printf("invalid removed length!\n");
+		return -1;
+	}
+
+	addr_ftr_ctrl = readl(&priv->regs->write_addr_filter_ctrl);
+	for (i = 0; i < 8; i++) {
+		bit_mask = 0x3 << (i * 2);
+		if ((addr_ftr_ctrl & bit_mask) != bit_mask)
+			continue;
+
+		reg_val = readl(&priv->regs->write_addr_filter[i]);
+		start = (reg_val & 0xffff) << 12;
+		end = (((reg_val & 0xffff0000) >> 16) << 12) + 0x1000;
+
+		if (offset != start || offset + len != end)
+			continue;
+
+		addr_ftr_ctrl &= ~(0x3 << (i * 2));
+		writel(addr_ftr_ctrl, &priv->regs->write_addr_filter_ctrl);
+		writel(0x0, &priv->regs->write_addr_filter[i]);
+		printf("remove write lock from offset, 0x%08x, with len, 0x%08x.\n",
+		       offset, (u32)len);
+		break;
+	}
+
+	if (i == 8) {
+		printf("cannot find expected removed region.\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static int aspeed_spi_mem_wlock(struct udevice *dev, u32 offset, size_t len)
+{
+	struct udevice *bus = dev->parent;
+	struct aspeed_spi_priv *priv = dev_get_priv(bus);
+	struct aspeed_spi_flash *flash;
+	struct spi_nor *nor;
+	int ret;
+
+	debug("%s offset: 0x%08x, len: 0x%08x.\n", __func__, offset, (u32)len);
+
+	flash = aspeed_spi_get_flash(dev);
+	if (!flash)
+		return -ENXIO;
+
+	nor = flash->spi;
+
+	debug("name: %s, read cmd: %02x, erase cmd: %02x, write cmd: %02x.\n",
+	      nor->name, nor->read_opcode, nor->erase_opcode, nor->program_opcode);
+
+	/* enable address filter */
+	aspeed_spi_fill_FQCD(priv, nor->read_opcode);
+	aspeed_spi_fill_AQCD(priv, nor->erase_opcode, nor->addr_width);
+	aspeed_spi_fill_AQCD(priv, nor->program_opcode, nor->addr_width);
+	aspeed_spi_cmd_filter_config(priv, flash->cs, true);
+
+	ret = aspeed_spi_write_addr_ftr_sanity(priv, offset, len);
+	if (ret < 0) {
+		printf("The expected protect region overlays with the existed regions!\n");
+		return ret;
+	}
+
+	ret = aspeed_add_write_addr_ftr(priv, offset, len);
+	if (ret < 0)
+		return -1;
+
+	return 0;
+}
+
+static int aspeed_spi_mem_wunlock(struct udevice *dev, u32 offset, size_t len)
+{
+	struct udevice *bus = dev->parent;
+	struct aspeed_spi_priv *priv = dev_get_priv(bus);
+	int ret;
+
+	ret = aspeed_remove_write_addr_ftr(priv, offset, len);
+	if (ret < 0)
+		return -1;
+
+	return 0;
+}
+#endif
 
 static int aspeed_spi_child_pre_probe(struct udevice *dev)
 {

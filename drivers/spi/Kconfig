@@ -41,6 +41,13 @@ config ASPEED_SPI
 	  used to access the SPI NOR flash on boards using the Aspeed
 	  AST2500 SoC, such as the POWER9 OpenPOWER platforms
 
+config ASPEED_SPI_FLASH_WRITE_PROTECTION
+	bool "Aspeed SPI flash write protection"
+	depends on ASPEED_SPI
+	help
+	  Enable AST2600 FMC SW CRTM feature. Also, command read/write
+	  mode should be used when SW CRTM is enabled.
+
 config ATCSPI200_SPI
 	bool "Andestech ATCSPI200 SPI driver"
 	help
