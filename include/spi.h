@@ -442,6 +442,9 @@ struct dm_spi_ops {
 	 *	   is invalid, other -ve value on error
 	 */
 	int (*cs_info)(struct udevice *bus, uint cs, struct spi_cs_info *info);
+
+	int (*mem_ctrl_wlock)(struct udevice *dev, u32 offset, size_t len);
+	int (*mem_ctrl_wunlock)(struct udevice *dev, u32 offset, size_t len);
 };
 
 struct dm_spi_emul_ops {

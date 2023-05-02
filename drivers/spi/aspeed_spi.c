@@ -1328,6 +1328,10 @@ static const struct dm_spi_ops aspeed_spi_ops = {
 	.set_mode	= aspeed_spi_set_mode,
 	.set_speed	= aspeed_spi_set_speed,
 	.xfer		= aspeed_spi_xfer,
+#ifdef CONFIG_ASPEED_SPI_FLASH_WRITE_PROTECTION
+	.mem_ctrl_wlock = aspeed_spi_mem_wlock,
+	.mem_ctrl_wunlock = aspeed_spi_mem_wunlock,
+#endif
 };
 
 static const struct udevice_id aspeed_spi_ids[] = {

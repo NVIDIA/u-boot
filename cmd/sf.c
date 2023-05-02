@@ -541,6 +541,42 @@ static int do_spi_flash_test(int argc, char * const argv[])
 }
 #endif /* CONFIG_CMD_SF_TEST */
 
+#ifdef CONFIG_ASPEED_SPI_FLASH_WRITE_PROTECTION
+static int do_spi_flash_ctrl_wlock(int argc, char * const argv[])
+{
+	int ret = 0;
+	unsigned long offset;
+	unsigned long len;
+	char *endp;
+	bool wlock;
+
+	if (argc != 4)
+		return -1;
+
+	offset = simple_strtoul(argv[2], &endp, 16);
+	if (*argv[2] == 0 || *endp != 0)
+		return -1;
+
+	len = simple_strtoul(argv[3], &endp, 16);
+	if (*argv[3] == 0 || *endp != 0)
+		return -1;
+
+	if (strcmp(argv[1], "lock") == 0)
+		wlock = true;
+	else if (strcmp(argv[1], "unlock") == 0)
+		wlock = false;
+	else
+		return -1;  /* Unknown parameter */
+
+	if (wlock)
+		ret = spi_flash_ctrl_wlock(flash, (u32)offset, (size_t)len);
+	else
+		ret = spi_flash_ctrl_wunlock(flash, (u32)offset, (size_t)len);
+
+	return ret == 0 ? 0 : 1;
+}
+#endif
+
 static int do_spi_flash(cmd_tbl_t *cmdtp, int flag, int argc,
 			char * const argv[])
 {
@@ -576,6 +612,10 @@ static int do_spi_flash(cmd_tbl_t *cmdtp, int flag, int argc,
 #ifdef CONFIG_CMD_SF_TEST
 	else if (!strcmp(cmd, "test"))
 		ret = do_spi_flash_test(argc, argv);
+#endif
+#ifdef CONFIG_ASPEED_SPI_FLASH_WRITE_PROTECTION
+	else if (!strcmp(cmd, "ctrl_wlock"))
+		ret = do_spi_flash_ctrl_wlock(argc, argv);
 #endif
 	else
 		ret = -1;

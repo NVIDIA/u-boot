@@ -1040,6 +1040,40 @@ static int stm_is_locked(struct spi_nor *nor, loff_t ofs, uint64_t len)
 }
 #endif /* CONFIG_SPI_FLASH_STMICRO */
 
+static int spi_nor_wlock_by_host_ctrl(struct spi_nor *nor,
+				      u32 offset, size_t len)
+{
+	struct spi_slave *spi = nor->spi;
+	int ret;
+
+	ret = spi_claim_bus(spi);
+	if (ret < 0)
+		return ret;
+
+	ret = spi_nor_ctrl_wlock(spi, offset, len);
+
+	spi_release_bus(spi);
+
+	return ret;
+}
+
+static int spi_nor_wunlock_by_host_ctrl(struct spi_nor *nor,
+					u32 offset, size_t len)
+{
+	struct spi_slave *spi = nor->spi;
+	int ret;
+
+	ret = spi_claim_bus(spi);
+	if (ret < 0)
+		return ret;
+
+	ret = spi_nor_ctrl_wunlock(spi, offset, len);
+
+	spi_release_bus(spi);
+
+	return ret;
+}
+
 static const struct flash_info *spi_nor_read_id(struct spi_nor *nor)
 {
 	int			tmp;
@@ -2579,6 +2613,8 @@ int spi_nor_scan(struct spi_nor *nor)
 	nor->write = spi_nor_write_data;
 	nor->read_reg = spi_nor_read_reg;
 	nor->write_reg = spi_nor_write_reg;
+	nor->flash_lock_by_host_ctrl = spi_nor_wlock_by_host_ctrl;
+	nor->flash_unlock_by_host_ctrl = spi_nor_wunlock_by_host_ctrl;
 
 	if (spi->mode & SPI_RX_QUAD) {
 		hwcaps.mask |= SNOR_HWCAPS_READ_1_1_4;
@@ -2740,3 +2776,16 @@ int spi_flash_cmd_get_sw_write_prot(struct spi_nor *nor)
 
 	return (sr >> 2) & 7;
 }
+
+int spi_flash_wlock_by_host_ctrl(struct spi_nor *nor, u32 offset, size_t len)
+{
+	nor->flash_lock_by_host_ctrl(nor, offset, len);
+	return 0;
+}
+
+int spi_flash_wunlock_by_host_ctrl(struct spi_nor *nor, u32 offset, size_t len)
+{
+	nor->flash_unlock_by_host_ctrl(nor, offset, len);
+	return 0;
+}
+

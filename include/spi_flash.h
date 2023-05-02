@@ -47,6 +47,8 @@ struct dm_spi_flash_ops {
 	 *	other -ve value on error
 	 */
 	int (*get_sw_write_prot)(struct udevice *dev);
+	int (*flash_ctrl_wlock)(struct udevice *dev, u32 offset, size_t len);
+	int (*flash_ctrl_wunlock)(struct udevice *dev, u32 offset, size_t len);
 };
 
 /* Access the serial operations for a device */
@@ -101,6 +103,8 @@ int spi_flash_erase_dm(struct udevice *dev, u32 offset, size_t len);
  *	other -ve value on error
  */
 int spl_flash_get_sw_write_prot(struct udevice *dev);
+int spi_flash_ctrl_wlock_dm(struct udevice *dev, u32 offset, size_t len);
+int spi_flash_ctrl_wunlock_dm(struct udevice *dev, u32 offset, size_t len);
 
 int spi_flash_probe_bus_cs(unsigned int busnum, unsigned int cs,
 			   unsigned int max_hz, unsigned int spi_mode,
@@ -129,6 +133,18 @@ static inline int spi_flash_erase(struct spi_flash *flash, u32 offset,
 				  size_t len)
 {
 	return spi_flash_erase_dm(flash->dev, offset, len);
+}
+
+static inline int spi_flash_ctrl_wlock(struct spi_flash *flash,
+				       u32 offset, size_t len)
+{
+	return spi_flash_ctrl_wlock_dm(flash->dev, offset, len);
+}
+
+static inline int spi_flash_ctrl_wunlock(struct spi_flash *flash,
+					 u32 offset, size_t len)
+{
+	return spi_flash_ctrl_wunlock_dm(flash->dev, offset, len);
 }
 
 struct sandbox_state;

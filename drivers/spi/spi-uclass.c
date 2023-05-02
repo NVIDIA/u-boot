@@ -92,6 +92,26 @@ int dm_spi_xfer(struct udevice *dev, unsigned int bitlen,
 	return spi_get_ops(bus)->xfer(dev, bitlen, dout, din, flags);
 }
 
+int dm_spi_nor_ctrl_wlock(struct udevice *dev, u32 offset, size_t len)
+{
+	struct udevice *bus = dev->parent;
+
+	if (bus->uclass->uc_drv->id != UCLASS_SPI)
+		return -EOPNOTSUPP;
+
+	return spi_get_ops(bus)->mem_ctrl_wlock(dev, offset, len);
+}
+
+int dm_spi_nor_ctrl_wunlock(struct udevice *dev, u32 offset, size_t len)
+{
+	struct udevice *bus = dev->parent;
+
+	if (bus->uclass->uc_drv->id != UCLASS_SPI)
+		return -EOPNOTSUPP;
+
+	return spi_get_ops(bus)->mem_ctrl_wunlock(dev, offset, len);
+}
+
 int spi_claim_bus(struct spi_slave *slave)
 {
 	return log_ret(dm_spi_claim_bus(slave->dev));
@@ -106,6 +126,16 @@ int spi_xfer(struct spi_slave *slave, unsigned int bitlen,
 	     const void *dout, void *din, unsigned long flags)
 {
 	return dm_spi_xfer(slave->dev, bitlen, dout, din, flags);
+}
+
+int spi_nor_ctrl_wlock(struct spi_slave *slave, u32 offset, size_t len)
+{
+	return dm_spi_nor_ctrl_wlock(slave->dev, offset, len);
+}
+
+int spi_nor_ctrl_wunlock(struct spi_slave *slave, u32 offset, size_t len)
+{
+	return dm_spi_nor_ctrl_wunlock(slave->dev, offset, len);
 }
 
 #if !CONFIG_IS_ENABLED(OF_PLATDATA)

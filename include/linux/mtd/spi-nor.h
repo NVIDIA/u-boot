@@ -333,6 +333,8 @@ struct spi_nor {
 	int (*flash_unlock)(struct spi_nor *nor, loff_t ofs, uint64_t len);
 	int (*flash_is_locked)(struct spi_nor *nor, loff_t ofs, uint64_t len);
 	int (*quad_enable)(struct spi_nor *nor);
+	int (*flash_lock_by_host_ctrl)(struct spi_nor *nor, u32 ofs, size_t len);
+	int (*flash_unlock_by_host_ctrl)(struct spi_nor *nor, u32 ofs, size_t len);
 
 	void *priv;
 /* Compatibility for spi_flash, remove once sf layer is merged with mtd */

@@ -93,6 +93,12 @@ int spi_flash_cmd_write(struct spi_slave *spi, const u8 *cmd, size_t cmd_len,
 /* Get software write-protect value (BP bits) */
 int spi_flash_cmd_get_sw_write_prot(struct spi_flash *flash);
 
+int spi_flash_wlock_by_host_ctrl(struct spi_flash *flash,
+				 u32 offset, size_t len);
+int spi_flash_wunlock_by_host_ctrl(struct spi_flash *flash,
+				   u32 offset, size_t len);
+int spi_nor_ctrl_wlock(struct spi_slave *slave, u32 offset, size_t len);
+int spi_nor_ctrl_wunlock(struct spi_slave *slave, u32 offset, size_t len);
 
 #ifdef CONFIG_SPI_FLASH_MTD
 int spi_flash_mtd_register(struct spi_flash *flash);
