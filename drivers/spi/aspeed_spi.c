@@ -1755,12 +1755,24 @@ static int aspeed_spi_claim_bus(struct udevice *dev)
 	struct aspeed_spi_priv *priv = dev_get_priv(bus);
 	struct dm_spi_slave_platdata *slave_plat = dev_get_parent_platdata(dev);
 	struct aspeed_spi_flash *flash;
+	struct spi_slave *slave = dev_get_parent_priv(dev);
+	u32 read_hclk;
 
 	debug("%s: claim bus CS%u\n", bus->name, slave_plat->cs);
 
 	flash = aspeed_spi_get_flash(dev);
 	if (!flash)
 		return -ENODEV;
+
+	if (priv->new_ver) {
+		if (dev_read_bool(bus, "timing-calibration-disabled")) {
+			read_hclk = aspeed_g6_spi_hclk_divisor(priv, slave->speed);
+			flash->ce_ctrl_user &= CE_CTRL_FREQ_MASK;
+			flash->ce_ctrl_user |= CE_G6_CTRL_CLOCK_FREQ(read_hclk);
+			flash->ce_ctrl_fread &= CE_CTRL_FREQ_MASK;
+			flash->ce_ctrl_fread |= CE_G6_CTRL_CLOCK_FREQ(read_hclk);
+		}
+	}
 
 	return aspeed_spi_flash_init(priv, flash, dev);
 }
