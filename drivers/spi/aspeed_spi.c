@@ -89,7 +89,7 @@ struct aspeed_spi_regs {
 #define CE_CTRL_CLOCK_FREQ(div)						\
 	(((div) & CE_CTRL_CLOCK_FREQ_MASK) << CE_CTRL_CLOCK_FREQ_SHIFT)
 #define CE_G6_CTRL_CLOCK_FREQ(div)						\
-	((((div) & CE_CTRL_CLOCK_FREQ_MASK) << CE_CTRL_CLOCK_FREQ_SHIFT) | (((div) & 0xf0) << 24))
+	((((div) & CE_CTRL_CLOCK_FREQ_MASK) << CE_CTRL_CLOCK_FREQ_SHIFT) | (((div) & 0xf0) << 20))
 #define CE_CTRL_DUMMY_LOW_SHIFT		6 /* 2 bits [7:6] */
 #define CE_CTRL_DUMMY_LOW_MASK		0x3
 #define CE_CTRL_DUMMY(dummy)						\
@@ -222,7 +222,7 @@ static u32 aspeed_g6_spi_hclk_divisor(struct aspeed_spi_priv *priv, u32 max_hz)
 	u32 i, j = 0;
 
 	/* FMC/SPIR10[27:24] */
-	for (j = 0; j < 0xf; i++) {
+	for (j = 0; j < 0xf; j++) {
 		for (i = 0; i < ARRAY_SIZE(hclk_masks); i++) {
 			if (i == 0 && j == 0)
 				continue;
