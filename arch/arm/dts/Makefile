@@ -696,7 +696,9 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2600-e4830-nvidia.dtb \
 	ast2600-moonraker-nvidia.dtb \
 	ast2600-mgx-nvidia.dtb \
-	ast2600a1-lunadp.dtb
+	ast2600a1-lunadp.dtb \
+	ast2600-legoc2-nvidia.dtb \
+	ast2600-legocg1-nvidia.dtb
 
 dtb-$(CONFIG_ARCH_STI) += stih410-b2260.dtb
 
