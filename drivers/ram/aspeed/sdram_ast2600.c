@@ -876,7 +876,7 @@ static void ast2600_sdrammc_ecc_enable(struct dram_info *info, u32 conf_size_mb)
 	writel(BIT(31), &regs->intr_ctrl);
 	writel(0, &regs->intr_ctrl);
 }
-
+#endif
 static int ast2600_sdrammc_probe(struct udevice *dev)
 {
 	struct dram_info *priv = (struct dram_info *)dev_get_priv(dev);
