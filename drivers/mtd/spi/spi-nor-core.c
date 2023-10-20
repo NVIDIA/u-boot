@@ -1991,7 +1991,6 @@ static const struct sfdp_bfpt_read sfdp_bfpt_reads[] = {
 	},
 };
 
-
 struct sfdp_bfpt_erase {
 	/*
 	 * The half-word at offset <shift> in DWORD <dwoard> encodes the

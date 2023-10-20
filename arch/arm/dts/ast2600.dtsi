@@ -419,24 +419,6 @@
 				status = "disabled";
 			};
 
-			pcie_rc_bridge0: pcie@1e6ed000 {
-				compatible = "aspeed,ast2600-rc_bridge";
-				reg = <0x1e6ed000 0x100>;
-				resets = <&rst ASPEED_RESET_PCIE_DEV_O>;
-				pinctrl-names = "default";
-				pinctrl-0 = <&pinctrl_pcie0rc_default>;
-				status = "disabled";
-			};
-
-			pcie_rc_bridge1: pcie@1e6ed200 {
-				compatible = "aspeed,ast2600-rc_bridge";
-				reg = <0x1e6ed200 0x100>;
-				resets = <&rst ASPEED_RESET_PCIE_RC_O>;
-				pinctrl-names = "default";
-				pinctrl-0 = <&pinctrl_pcie1rc_default>;
-				status = "disabled";
-			};
-
 			pcie_bridge: pcie@1e770000 {
 				compatible = "aspeed,ast2600-pcie";
 				#address-cells = <3>;
@@ -446,11 +428,11 @@
 						0x82000000 0x0 0x60000000 0x60000000 0x0 0x20000000>; /* non-prefetchable memory */
 				device_type = "pci";
 				bus-range = <0x00 0xff>;
-				resets = <&rst ASPEED_RESET_H2X>;
-				slot0-handle = <&pcie_rc_bridge0>;
-				slot1-handle = <&pcie_rc_bridge1>;
+				resets = <&rst ASPEED_RESET_H2X>, <&rst ASPEED_RESET_PCIE_DEV_O>, <&rst ASPEED_RESET_PCIE_RC_O>;
+				slot0-handle = <&pcie_phy0>;
+				slot1-handle = <&pcie_phy1>;
 				status = "disabled";
-			};
+			};                        
 
 			gpio0: gpio@1e780000 {
 				compatible = "aspeed,ast2600-gpio";
