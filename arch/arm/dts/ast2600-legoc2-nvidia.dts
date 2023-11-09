@@ -58,15 +58,25 @@
 &wdt3 {
 	status = "okay";
 };
+
+&mdio {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_mdio1_default>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	ethphy0: ethernet-phy@0 {
+		reg = <0>;
+	};
+};
+
 &mac0 {
 	status = "okay";
-	phy-mode = "rgmii";
+	phy-mode = "rgmii-rxid";
+	max-speed = <1000>;
+	phy-handle = <&ethphy0>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_rgmii1_default &pinctrl_mac1link_default>;
-        fixed-link {
-        speed = <100>;
-        full-duplex;
-        };
+	pinctrl-0 = <&pinctrl_rgmii1_default>;
 };
 
 &fmc {
