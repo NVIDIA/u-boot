@@ -58,6 +58,10 @@
 #define MIIM_RTL8211F_RX_DELAY		0x8
 #define MIIM_RTL8211F_LCR		0x10
 
+#define RTL8211F_MODE_SEL			(BIT(2) | BIT(1) | BIT(0))
+#define RTL8211F_SGMII_RGMII_PM			0x4
+#define RTL8211F_SGMII_RGMII_MP			0x5
+
 static int rtl8211f_phy_extread(struct phy_device *phydev, int addr,
 				int devaddr, int regnum)
 {
@@ -151,8 +155,57 @@ static int rtl8211x_config(struct phy_device *phydev)
 static int rtl8211f_config(struct phy_device *phydev)
 {
 	u16 reg;
+	u16 orig_page;
 
 	phy_write(phydev, MDIO_DEVAD_NONE, MII_BMCR, BMCR_RESET);
+
+	orig_page = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_RTL8211F_PAGE_SELECT);
+
+	/* RTL8211F SGMII to RGMII MODE verification - NVIDIA BMC */
+	phy_write(phydev, MDIO_DEVAD_NONE,
+		  MIIM_RTL8211F_PAGE_SELECT, 0xd40);
+	reg = phy_read(phydev, MDIO_DEVAD_NONE, 0x10);
+	if(reg < 0) {
+		phy_write(phydev, MDIO_DEVAD_NONE,
+			MIIM_RTL8211F_PAGE_SELECT, orig_page);
+		dev_err(dev, "Failed to read Mode Selection\n");
+		return reg;
+	}
+
+	reg = reg & RTL8211F_MODE_SEL;
+
+	if (reg == RTL8211F_SGMII_RGMII_PM || reg == RTL8211F_SGMII_RGMII_MP) {
+
+		/* Force hardware straps 3'b100, SGMII(PHY Side) to RGMII(MAC Side) for NVIDIA BMC*/
+		phy_write(phydev, MDIO_DEVAD_NONE,
+			MIIM_RTL8211F_PAGE_SELECT, 0xd40);
+		reg = phy_read(phydev, MDIO_DEVAD_NONE, 0x10);
+		reg &= ~RTL8211F_MODE_SEL;
+		reg |= RTL8211F_SGMII_RGMII_PM;
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x10, reg);
+
+		/* set bit 0.15 => PHY RESET */
+		phy_write(phydev, MDIO_DEVAD_NONE,
+			MIIM_RTL8211F_PAGE_SELECT, 0);
+		reg = phy_read(phydev, MDIO_DEVAD_NONE, 0);
+		reg |= BIT(15);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0, reg);
+
+		/* SGMII ANAR (SGMII Auto-Negotiation Advertising Register) */
+		/*Link status : set to 1 , Duplex Mode : Full Duplex*/
+		phy_write(phydev, MDIO_DEVAD_NONE,
+			MIIM_RTL8211F_PAGE_SELECT, 0xd08);
+		reg = phy_read(phydev, MDIO_DEVAD_NONE, 0x10);
+		reg |= (BIT(3)|BIT(2));
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x10, reg);
+
+		/* Speed : 1000Mbps */
+		reg = phy_read(phydev, MDIO_DEVAD_NONE, 0x10);
+		reg &= ~(BIT(1)|BIT(0));
+		reg |= BIT(1);
+		phy_write(phydev, MDIO_DEVAD_NONE, 0x10, reg);
+
+	}
 
 	phy_write(phydev, MDIO_DEVAD_NONE,
 		  MIIM_RTL8211F_PAGE_SELECT, 0xd08);
@@ -188,7 +241,8 @@ static int rtl8211f_config(struct phy_device *phydev)
 		  MIIM_RTL8211F_PAGE_SELECT, 0x0);
 
 	genphy_config_aneg(phydev);
-
+	phy_write(phydev, MDIO_DEVAD_NONE,
+	  MIIM_RTL8211F_PAGE_SELECT, orig_page);
 	return 0;
 }
 
@@ -321,13 +375,49 @@ static int rtl8211f_startup(struct phy_device *phydev)
 {
 	int ret;
 
-	/* Read the Status (2x to make sure link is right) */
-	ret = genphy_update_link(phydev);
-	if (ret)
-		return ret;
-	/* Read the Status (2x to make sure link is right) */
+	u16 orig_page;
+	orig_page = phy_read(phydev, MDIO_DEVAD_NONE, MIIM_RTL8211F_PAGE_SELECT);
 
-	return rtl8211f_parse_status(phydev);
+	/* RTL8211F SGMII to RGMII MODE verification - NVIDIA BMC */
+	phy_write(phydev, MDIO_DEVAD_NONE,
+		MIIM_RTL8211F_PAGE_SELECT, 0xd40);
+	ret = phy_read(phydev, MDIO_DEVAD_NONE, 0x10);
+
+	ret = ret & RTL8211F_MODE_SEL;
+
+	if (ret == RTL8211F_SGMII_RGMII_PM || ret == RTL8211F_SGMII_RGMII_MP) {
+
+		/* Check Link status */
+		phy_write(phydev, MDIO_DEVAD_NONE,
+			MIIM_RTL8211F_PAGE_SELECT, 0xdcf);
+		ret = phy_read(phydev, MDIO_DEVAD_NONE, 0x15);
+		if (ret < 0) {
+			phy_write(phydev, MDIO_DEVAD_NONE,
+			  MIIM_RTL8211F_PAGE_SELECT, orig_page);
+			dev_err(&phydev->mdio.dev,"failed to read  link status \n");
+			return ret;
+		}
+		/* Link is Up */
+		if (ret &  BIT(4)) {
+			phydev->link = 1;
+			phydev->speed = 1000;
+			phydev->duplex=DUPLEX_FULL;
+		}
+	} else {
+
+		/* Read the Status (2x to make sure link is right) */
+		ret = genphy_update_link(phydev);
+		if (ret)
+			return ret;
+		/* Read the Status (2x to make sure link is right) */
+
+		return rtl8211f_parse_status(phydev);
+	}
+
+	phy_write(phydev, MDIO_DEVAD_NONE,
+	  MIIM_RTL8211F_PAGE_SELECT, orig_page);
+
+	return 0;
 }
 
 /* Support for RTL8211B PHY */
