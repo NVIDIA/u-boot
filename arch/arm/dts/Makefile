@@ -701,7 +701,9 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2600-mgx-nvidia.dtb \
 	ast2600a1-lunadp.dtb \
 	ast2600-legoc2-nvidia.dtb \
-	ast2600-legocg1-nvidia.dtb
+	ast2600-legocg1-nvidia.dtb \
+	ast2600-spectre-nvidia.dtb \
+	ast2600-spectre-simulation-nvidia.dts
 
 dtb-$(CONFIG_ARCH_STI) += stih410-b2260.dtb
 
