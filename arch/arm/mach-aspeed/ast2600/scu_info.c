@@ -9,6 +9,8 @@
 #include <asm/io.h>
 #include <asm/arch/aspeed_scu_info.h>
 
+DECLARE_GLOBAL_DATA_PTR;
+
 /* SoC mapping Table */
 #define SOC_ID(str, rev) { .name = str, .rev_id = rev, }
 
@@ -190,24 +192,29 @@ void aspeed_print_security_info(void)
 #define BIT_WDT_ARM(x)	SYS_WDT ## x ## _ARM_RESET
 #define BIT_WDT_SW(x)	SYS_WDT ## x ## _SW_RESET
 
-#define HANDLE_WDTx_RESET(x, event_log, event_log_reg) \
+#define HANDLE_WDTx_RESET(x, event_log, event_log_reg, reset_reason) \
 	if (event_log & (BIT_WDT_SOC(x) | BIT_WDT_FULL(x) | BIT_WDT_ARM(x) | BIT_WDT_SW(x))) { \
 		printf("RST: WDT%d ", x); \
+		char *prefix = "WDT";\
 		if (event_log & BIT_WDT_SOC(x)) { \
 			printf("SOC "); \
 			writel(BIT_WDT_SOC(x), event_log_reg); \
+			snprintf(reset_reason, BUFF_SIZE, "%s%d_SOC\0", prefix, x); \
 		} \
 		if (event_log & BIT_WDT_FULL(x)) { \
 			printf("FULL "); \
 			writel(BIT_WDT_FULL(x), event_log_reg); \
+			snprintf(reset_reason, BUFF_SIZE, "%s%d_FULL\0", prefix, x); \
 		} \
 		if (event_log & BIT_WDT_ARM(x)) { \
 			printf("ARM "); \
 			writel(BIT_WDT_ARM(x), event_log_reg); \
+			snprintf(reset_reason, BUFF_SIZE, "%s%d_ARM\0", prefix, x); \
 		} \
 		if (event_log & BIT_WDT_SW(x)) { \
 			printf("SW "); \
 			writel(BIT_WDT_SW(x), event_log_reg); \
+			snprintf(reset_reason, BUFF_SIZE, "%s%d_SW\0", prefix, x); \
 		} \
 		printf("\n"); \
 	} \
@@ -217,19 +224,22 @@ void aspeed_print_sysrst_info(void)
 {
 	u32 rest = readl(ASPEED_SYS_RESET_CTRL);
 	u32 rest3 = readl(ASPEED_SYS_RESET_CTRL3);
+	char reset_reason[BUFF_SIZE];
 
+	memset(reset_reason, 0, sizeof(reset_reason));
 	if (rest & SYS_PWR_RESET_FLAG) {
 		printf("RST: Power On \n");
 		writel(rest, ASPEED_SYS_RESET_CTRL);
+		snprintf(reset_reason, BUFF_SIZE, "Power_On\0");
 	} else {
-		HANDLE_WDTx_RESET(8, rest3, ASPEED_SYS_RESET_CTRL3);
-		HANDLE_WDTx_RESET(7, rest3, ASPEED_SYS_RESET_CTRL3);
-		HANDLE_WDTx_RESET(6, rest3, ASPEED_SYS_RESET_CTRL3);
-		HANDLE_WDTx_RESET(5, rest3, ASPEED_SYS_RESET_CTRL3);
-		HANDLE_WDTx_RESET(4, rest, ASPEED_SYS_RESET_CTRL);
-		HANDLE_WDTx_RESET(3, rest, ASPEED_SYS_RESET_CTRL);
-		HANDLE_WDTx_RESET(2, rest, ASPEED_SYS_RESET_CTRL);
-		HANDLE_WDTx_RESET(1, rest, ASPEED_SYS_RESET_CTRL);
+		HANDLE_WDTx_RESET(8, rest3, ASPEED_SYS_RESET_CTRL3, reset_reason);
+		HANDLE_WDTx_RESET(7, rest3, ASPEED_SYS_RESET_CTRL3, reset_reason);
+		HANDLE_WDTx_RESET(6, rest3, ASPEED_SYS_RESET_CTRL3, reset_reason);
+		HANDLE_WDTx_RESET(5, rest3, ASPEED_SYS_RESET_CTRL3, reset_reason);
+		HANDLE_WDTx_RESET(4, rest, ASPEED_SYS_RESET_CTRL, reset_reason);
+		HANDLE_WDTx_RESET(3, rest, ASPEED_SYS_RESET_CTRL, reset_reason);
+		HANDLE_WDTx_RESET(2, rest, ASPEED_SYS_RESET_CTRL, reset_reason);
+		HANDLE_WDTx_RESET(1, rest, ASPEED_SYS_RESET_CTRL, reset_reason);
 
 		if (rest & SYS_CM3_EXT_RESET) {
 			printf("RST: SYS_CM3_EXT_RESET \n");
@@ -264,6 +274,7 @@ void aspeed_print_sysrst_info(void)
 			writel(SYS_EXT_RESET, ASPEED_SYS_RESET_CTRL);
 		}	
 	}
+	strncpy(gd->reset_reason, reset_reason, BUFF_SIZE);
 }
 
 #define SOC_FW_INIT_DRAM		BIT(7)

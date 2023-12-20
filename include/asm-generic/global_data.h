@@ -23,6 +23,8 @@
 #include <membuff.h>
 #include <linux/list.h>
 
+#define BUFF_SIZE 16
+
 typedef struct global_data {
 	bd_t *bd;
 	unsigned long flags;
@@ -132,6 +134,9 @@ typedef struct global_data {
 # ifdef CONFIG_SPL
 	struct spl_handoff *spl_handoff;
 # endif
+#endif
+#ifdef CONFIG_ARCH_ASPEED
+	char reset_reason[BUFF_SIZE];
 #endif
 } gd_t;
 #endif

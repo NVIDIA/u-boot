@@ -665,6 +665,17 @@ static int initr_bedbug(void)
 }
 #endif
 
+#ifdef CONFIG_ARCH_ASPEED
+int initr_reset_reason(void)
+{
+	/* Add reset reason to env */
+	env_set("reset_reason", gd->reset_reason);
+	env_save();
+
+	return 0;
+}
+#endif
+
 static int run_main_loop(void)
 {
 #ifdef CONFIG_SANDBOX
@@ -871,6 +882,9 @@ static init_fnc_t init_sequence_r[] = {
 #endif
 #if defined(CONFIG_PRAM)
 	initr_mem,
+#endif
+#ifdef CONFIG_ARCH_ASPEED
+	initr_reset_reason,
 #endif
 	run_main_loop,
 };
