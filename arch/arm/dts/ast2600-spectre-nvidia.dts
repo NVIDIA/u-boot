@@ -6,16 +6,15 @@
  */
 /dts-v1/;
 
+/*
+   TODO add boot delay after the bringup.
+   Example at moonraker dts
+*/
 #include "ast2600-u-boot.dtsi"
 
 / {
 	model = "AST2600 Spectre";
 	compatible = "aspeed,ast2600-evb", "aspeed,ast2600";
-	config {
-		bootdelay = <(-2)>;
-		bootsecure = <1>;
-		bootcmd = "boot";
-	};
 	memory {
 		device_type = "memory";
 		reg = <0x80000000 0x80000000>;
@@ -26,14 +25,9 @@
 	};
 
 	aliases {
-		mmc0 = &emmc_slot0;
-		mmc1 = &sdhci_slot0;
-		mmc2 = &sdhci_slot1;
 		spi0 = &fmc;
 		spi1 = &spi1;
 		spi2 = &spi2;
-		ethernet0 = &mac0;
-		ethernet1 = &mac1;
 		ethernet2 = &mac2;
 		ethernet3 = &mac3;
 	};
@@ -95,7 +89,7 @@
         pinctrl-0 = <&pinctrl_mdio3_default &pinctrl_mdio4_default>;
 };
 
-
+/* TODO - remove from fmc flash1 and 2 */
 &fmc {
 	status = "okay";
 
@@ -124,7 +118,7 @@
 	};
 };
 
-/* CR question , why spi1 defined  */
+/* TODO remove spi1 */
 &spi1 {
 	status = "okay";
 
@@ -168,22 +162,14 @@
 
 };
 
-//Glacier i2c
+// Glacier i2c
 &i2c15 {
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_i2c16_default>;
 };
 
-//I2C between SMBUS and BMC
-&i2c8 {
-	status = "okay";
-
-	pinctrl-names = "default";
-	pinctrl-0 = <&pinctrl_i2c9_default>;
-};
-
-//I2C between BMC and RTC clock
+// I2C between BMC and RTC clock
 &i2c7 {
 	status = "okay";
 
@@ -191,7 +177,7 @@
 	pinctrl-0 = <&pinctrl_i2c8_default>;
 };
 
-//EPROM 2 BMC
+// EPROM 2 BMC
 &i2c2 {
 	status = "okay";
 	eeprom@50 {
@@ -210,20 +196,11 @@
 
 &scu {
 	mac0-clk-delay = <0x10 0x0a
-			  0x10 0x10
-			  0x10 0x10>;
+			0x10 0x10
+			0x10 0x10>;
 	mac1-clk-delay = <0x10 0x0a
-			  0x10 0x10
-			  0x10 0x10>;
-	mac2-clk-delay = <0x08 0x04
-			  0x08 0x04
-			  0x08 0x04>;
-	mac3-clk-delay = <0x08 0x04
-			  0x08 0x04
-			  0x08 0x04>;
-};
-
-&scu {
+			0x10 0x10
+			0x10 0x10>;
 	mac2-clk-delay = <0x08 0x00
 			0x08 0x00
 			0x08 0x00>;
@@ -231,5 +208,4 @@
 			0x08 0x00
 			0x08 0x00>;
 };
-
 

@@ -703,7 +703,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2600-legoc2-nvidia.dtb \
 	ast2600-legocg1-nvidia.dtb \
 	ast2600-spectre-nvidia.dtb \
-	ast2600-spectre-simulation-nvidia.dts
+	ast2600-spectre-simulation-nvidia.dtb
 
 dtb-$(CONFIG_ARCH_STI) += stih410-b2260.dtb
 
