@@ -1316,6 +1316,12 @@ config CMD_MII
 	help
 	  Enable MII utility commands.
 
+config CMD_SWITCH_CONFIG
+	bool "switch config"
+        depends on CMD_MII
+	help
+	  Config internal switch
+
 config CMD_PING
 	bool "ping"
 	help

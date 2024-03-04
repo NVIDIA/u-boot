@@ -96,6 +96,7 @@ obj-$(CONFIG_CMD_MEMORY) += mem.o
 obj-$(CONFIG_CMD_IO) += io.o
 obj-$(CONFIG_CMD_MFSL) += mfsl.o
 obj-$(CONFIG_CMD_MII) += mii.o
+obj-$(CONFIG_CMD_SWITCH_CONFIG) += spectre_switch_conf.o
 obj-$(CONFIG_CMD_OTP) += otp.o
 obj-$(CONFIG_CMD_RNG) += rng.o
 ifdef CONFIG_PHYLIB
