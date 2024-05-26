@@ -440,6 +440,18 @@ static int initr_env(void)
 		env_relocate();
 	else
 		set_default_env(NULL, 0);
+#ifdef CONFIG_U_BOOT_FACTORY_RESET
+	char* factory_reset_status =  env_get("openbmconce");
+	if (strcmp(factory_reset_status,"factory-reset")){
+		set_default_env("factory reset requested", 0);
+		if (env_set("openbmconce", "factory-reset") != 0 ){
+			puts("u-boot factory reset failed \n");
+		}else{
+			puts("u-boot factory reset succeeded \n");
+		}
+	}
+#endif
+
 #ifdef CONFIG_OF_CONTROL
 	env_set_hex("fdtcontroladdr",
 		    (unsigned long)map_to_sysmem(gd->fdt_blob));
@@ -447,7 +459,6 @@ static int initr_env(void)
 
 	/* Initialize from environment */
 	load_addr = env_get_ulong("loadaddr", 16, load_addr);
-
 	return 0;
 }
 
