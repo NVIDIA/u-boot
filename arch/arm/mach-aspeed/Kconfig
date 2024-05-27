@@ -114,6 +114,19 @@ config ASPEED_SECURE_BOOT_DEBUG
 	help
 	  This option allows the bootm command use
 
+config ENABLE_PLATFORM_MESSAGE
+	  bool "Enable platform message prints"
+	  default n
+	  help
+	  Enable platform message prints
+	  String is set by PLATFORM_MESSAGE
+
+config PLATFORM_MESSAGE
+	  string "Platform message prints"
+	  help
+	  When ENABLE_PLATFORM_MESSAGE
+	  paltform message is added to u-boot and kernel start prints
+
 config ASPEED_LOADERS
 	bool "Aspeed custom loaders"
 	depends on SPL

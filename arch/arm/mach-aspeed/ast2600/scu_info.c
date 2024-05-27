@@ -44,6 +44,9 @@ void aspeed_print_soc_id(void)
 		if (rev_id == soc_map_table[i].rev_id)
 			break;
 	}
+#ifdef CONFIG_ENABLE_PLATFORM_MESSAGE
+	printf("%sU-BOOT starting\n", CONFIG_PLATFORM_MESSAGE);
+#endif
 	if (i == ARRAY_SIZE(soc_map_table))
 		printf("UnKnow-SOC: %llx\n", rev_id);
 	else
