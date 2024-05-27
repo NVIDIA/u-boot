@@ -656,6 +656,12 @@ config MACADDR_IN_EEPROM
           This option is for reading MAC address from EEPROM
           and set the MAC address in MAC env.
 
+config U_BOOT_FACTORY_RESET
+	bool "U BOOT FACTORY RESET"
+	default n
+	help
+	   defines if U-BOOT factory reset is needed
+
 config HAS_ETH1
 	bool "Configure if eth1 is used"
 	default n

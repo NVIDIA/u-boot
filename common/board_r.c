@@ -441,14 +441,14 @@ static int initr_env(void)
 	else
 		set_default_env(NULL, 0);
 #ifdef CONFIG_U_BOOT_FACTORY_RESET
-	char* factory_reset_status =  env_get("openbmconce");
-	if (strcmp(factory_reset_status,"factory-reset")){
+	char *factory_reset_status =  env_get("openbmconce");
+
+	if (factory_reset_status && strcmp(factory_reset_status, "factory-reset") == 0) {
 		set_default_env("factory reset requested", 0);
-		if (env_set("openbmconce", "factory-reset") != 0 ){
+		if (env_set("openbmconce", "factory-reset") != 0)
 			puts("u-boot factory reset failed \n");
-		}else{
+		else
 			puts("u-boot factory reset succeeded \n");
-		}
 	}
 #endif
 

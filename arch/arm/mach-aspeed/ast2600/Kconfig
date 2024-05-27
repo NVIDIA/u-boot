@@ -51,12 +51,6 @@ config TARGET_AST2600_DCSCM
 	  AST2600_DCSCM_AVENUE_CITY is an Aspeed demo board in
 	  DCSCM form factor.
 
-config U_BOOT_FACTORY_RESET
-	bool "U BOOT FACTORY RESET"
-	default n
-	help
-	   defines if U-BOOT factory reset is needed 
-
 config TARGET_QUALCOMM_DC_SCM_V1
 	bool "QUALCOMM-DC-SCM-V1"
 	depends on ASPEED_AST2600
