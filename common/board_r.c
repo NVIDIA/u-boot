@@ -445,10 +445,14 @@ static int initr_env(void)
 
 	if (factory_reset_status && strcmp(factory_reset_status, "factory-reset") == 0) {
 		set_default_env("factory reset requested", 0);
-		if (env_set("openbmconce", "factory-reset") != 0)
-			puts("failed to set linux confinguration factory reset\n");
-		else
-			puts("u-boot factory reset succeeded \n");
+		if (env_set("openbmconce", "factory-reset") != 0) {
+			puts("failed to set linux confinguration factory reset command\n");
+		} else {
+			if (env_save() != 0)
+				puts("failed to save linux confinguration factory reset command\n");
+			else
+				puts("u-boot factory reset succeeded\n");
+		}
 	}
 #endif
 
