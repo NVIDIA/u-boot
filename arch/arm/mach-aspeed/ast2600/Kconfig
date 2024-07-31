@@ -58,6 +58,13 @@ config TARGET_QUALCOMM_DC_SCM_V1
 	  QUALCOMM-DC-SCM-V1 is a Qualcomm DC-SCM V1 board which is
 	  equipped with AST2600.
 
+config TARGET_NVIDIA_GB200NVL
+	bool "Support nvidia-gb200nvl"
+	depends on ASPEED_AST2600
+	help
+	  nvidia-gb200nvl is a NVIDIA GB200NVL board which is
+	  equipped with AST2600.
+
 endchoice
 
 source "board/aspeed/evb_ast2600/Kconfig"
@@ -67,5 +74,6 @@ source "board/aspeed/ast2600_ibm/Kconfig"
 source "board/aspeed/ast2600_intel/Kconfig"
 source "board/aspeed/ast2600_dcscm/Kconfig"
 source "board/qualcomm/dc-scm-v1/Kconfig"
+source "board/nvidia/gb200nvl/Kconfig"
 
 endif

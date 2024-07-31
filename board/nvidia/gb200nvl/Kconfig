@@ -1,0 +1,13 @@
+if TARGET_NVIDIA_GB200NVL
+
+config SYS_BOARD
+	default "gb200nvl"
+
+config SYS_VENDOR
+	default "nvidia"
+
+config SYS_CONFIG_NAME
+	string "board configuration name"
+	default "gb200nvl"
+
+endif
