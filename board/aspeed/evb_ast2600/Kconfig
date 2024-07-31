@@ -10,4 +10,7 @@ config SYS_CONFIG_NAME
 	string "board configuration name"
 	default "evb_ast2600"
 
+config GB200NVL
+       bool "NVIDIA GB200NVL"
+       default n
 endif
