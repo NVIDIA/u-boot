@@ -299,11 +299,11 @@ static struct aspeed_sig_desc spi2quad_link[] = {
 };
 
 static struct aspeed_sig_desc fsi1[] = {
-	{ 0xd48, GENMASK(21, 20), 0 },
+	{ 0x4d8, GENMASK(21, 20), 0 },
 };
 
 static struct aspeed_sig_desc fsi2[] = {
-	{ 0xd48, GENMASK(23, 22), 0 },
+	{ 0x4d8, GENMASK(23, 22), 0 },
 };
 
 static struct aspeed_sig_desc usb2ad_link[] = {
