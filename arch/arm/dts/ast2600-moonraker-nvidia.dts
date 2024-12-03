@@ -232,3 +232,10 @@
 		eth2macoffset = <0xff 0xff 0x79 0xff 0xff 0xff>;
 	};
 };
+
+&sdrammc {
+	clock-frequency = <400000000>;
+	aspeed,ecc-enabled;
+	aspeed,ecc-size-mb = <0>;
+};
+
