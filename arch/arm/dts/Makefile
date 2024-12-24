@@ -681,6 +681,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2500-evb.dtb \
 	ast2500-romulus.dtb \
 	ast2500-bluesphere-nvidia.dtb \
+	ast2600-bluesphere-nvidia-debug.dtb \
 	ast2600a0-evb.dtb \
 	ast2600a1-evb.dtb \
 	ast2600-bletchley.dtb \
@@ -698,6 +699,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2600-tacoma.dtb \
 	ast2600-e4830-nvidia.dtb \
 	ast2600-moonraker-nvidia.dtb \
+	ast2600-moonraker-nvidia-debug.dtb \
 	ast2600-igx-nvidia.dtb \
 	ast2600a1-lunadp.dtb \
 	ast2600-legoc2-nvidia.dtb \

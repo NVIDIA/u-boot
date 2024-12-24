@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree Source extras for U-Boot for the Moonraker
+ * Copyright (C) Nvidia
+ */
+/dts-v1/;
+
+#include "ast2600-moonraker-nvidia.dts"  // Inherit from the original DTS
+
+/ {
+	// Delete the inherited config block
+	/delete-node/ config;
+};

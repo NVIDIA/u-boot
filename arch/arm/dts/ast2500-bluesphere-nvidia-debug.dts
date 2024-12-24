@@ -1,0 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Device Tree Source extras for U-Boot for the BlueSphere
+ * Copyright (C) Nvidia
+ */
+#include "ast2500-bluesphere-nvidia.dts"  // Inherit from the base DTS
+
+/ {
+	// Delete the inherited config block
+	/delete-node/ config;
+};
