@@ -681,7 +681,7 @@ dtb-$(CONFIG_ARCH_ASPEED) += \
 	ast2500-evb.dtb \
 	ast2500-romulus.dtb \
 	ast2500-bluesphere-nvidia.dtb \
-	ast2600-bluesphere-nvidia-debug.dtb \
+	ast2500-bluesphere-nvidia-debug.dtb \
 	ast2600a0-evb.dtb \
 	ast2600a1-evb.dtb \
 	ast2600-bletchley.dtb \
