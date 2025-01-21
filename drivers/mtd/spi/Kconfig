@@ -190,11 +190,13 @@ config SPI_FLASH_MTD
 
 	  If unsure, say N
 
-config SPI_FLASH_NO_QUAD_READ
-	bool "Not support QUAD READ with SPI flash"
+config SPI_FLASH_ONLY_SINGLE_READ
+	bool "Disable all non-single read with SPI flash"
 	depends on SPI_FLASH
 	default n
 	help
-          Used to adjust the QUAD_READ config when hardware does not support it.
+	  Certain platform hardware always fails with DUAL or QUAD reads to the SPI
+	  NOR. Add compile time option to disable all non-single reads to enable
+	  u-boot to read the SPIs reliably on these platforms.
 
 endmenu # menu "SPI Flash Support"

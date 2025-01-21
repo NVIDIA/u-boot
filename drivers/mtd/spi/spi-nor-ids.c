@@ -153,7 +153,7 @@ const struct flash_info spi_nor_ids[] = {
 	},
 	{
 		INFO("gd25lq32", 0xc86016, 0, 64 * 1024, 64,
-			SECT_4K SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB)
+			SECT_4K | SPI_NOR_HAS_LOCK | SPI_NOR_HAS_TB)
 	},
 	{
 		INFO("gd25q64", 0xc84017, 0, 64 * 1024, 128,
