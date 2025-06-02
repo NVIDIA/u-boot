@@ -13,4 +13,9 @@ config SYS_CONFIG_NAME
 config GB200NVL
        bool "NVIDIA GB200NVL"
        default n
+
+config B300
+       bool "NVIDIA B300"
+       default n
+
 endif

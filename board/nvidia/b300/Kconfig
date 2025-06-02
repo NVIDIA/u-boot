@@ -1,0 +1,13 @@
+if TARGET_NVIDIA_B300
+
+config SYS_BOARD
+	default "b300"
+
+config SYS_VENDOR
+	default "nvidia"
+
+config SYS_CONFIG_NAME
+	string "board configuration name"
+	default "b300"
+
+endif
