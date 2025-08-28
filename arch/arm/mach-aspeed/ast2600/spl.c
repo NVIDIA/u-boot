@@ -100,6 +100,7 @@ int spl_start_uboot(void)
 }
 #endif
 
+#ifdef CONFIG_SPL_FIT_IMAGE_POST_PROCESS
 void board_fit_image_post_process(const void *fit, int node, void **p_image, size_t *p_size)
 {
 	ulong s_ep;
@@ -117,6 +118,7 @@ void board_fit_image_post_process(const void *fit, int node, void **p_image, siz
 	writel(s_ep, SCU_SMP_SEC_ENTRY);
 	writel(BIT(17) | BIT(18) | BIT(19), SCU_WPROT2);
 }
+#endif
 
 int board_fit_config_name_match(const char *name)
 {
