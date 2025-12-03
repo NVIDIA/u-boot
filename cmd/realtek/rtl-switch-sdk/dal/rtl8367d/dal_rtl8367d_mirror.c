@@ -1,0 +1,541 @@
+/*
+ * Copyright (C) 2013 Realtek Semiconductor Corp.
+ * All Rights Reserved.
+ *
+ * This program is the proprietary software of Realtek Semiconductor
+ * Corporation and/or its licensors, and only be used, duplicated,
+ * modified or distributed under the authorized license from Realtek.
+ *
+ * ANY USE OF THE SOFTWARE OTHER THAN AS AUTHORIZED UNDER
+ * THIS LICENSE OR COPYRIGHT LAW IS PROHIBITED.
+ *
+ * $Revision$
+ * $Date$
+ *
+ * Purpose : RTK switch high-level API for RTL8367/RTL8367C
+ * Feature : Here is a list of all functions and variables in Mirror module.
+ *
+ */
+
+#include "../../rtk_switch.h"
+#include "../../rtk_error.h"
+#include "dal_rtl8367d_mirror.h"
+#include "rtl8367d_asicdrv.h"
+
+#include "../dal_mgmts.h"
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_portBased_set
+ * Description:
+ *      Set port mirror function.
+ * Input:
+ *      unit                    - Unit ID
+ *      mirroring_port          - Monitor port.
+ *      pMirrored_rx_portmask   - Rx mirror port mask.
+ *      pMirrored_tx_portmask   - Tx mirror port mask.
+ * Output:
+ *      None
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_PORT_ID      - Invalid port number
+ *      RT_ERR_PORT_MASK    - Invalid portmask.
+ * Note:
+ *      The API is to set mirror function of source port and mirror port.
+ *      The mirror port can only be set to one port and the TX and RX mirror ports
+ *      should be identical.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_portBased_set(rtksw_uint32 unit, rtksw_port_t mirroring_port, rtksw_portmask_t *pMirrored_rx_portmask, rtksw_portmask_t *pMirrored_tx_portmask)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 rxPmask;
+    rtksw_uint32 txPmask;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    /* Check port valid */
+    RTKSW_CHK_PORT_VALID(unit, mirroring_port);
+
+    if(NULL == pMirrored_rx_portmask)
+        return RT_ERR_NULL_POINTER;
+
+    if(NULL == pMirrored_tx_portmask)
+        return RT_ERR_NULL_POINTER;
+
+    RTKSW_CHK_PORTMASK_VALID(unit, pMirrored_rx_portmask);
+
+    RTKSW_CHK_PORTMASK_VALID(unit, pMirrored_tx_portmask);
+
+    /*mirror port != source port*/
+    if(RTKSW_PORTMASK_IS_PORT_SET((*pMirrored_tx_portmask), mirroring_port) || RTKSW_PORTMASK_IS_PORT_SET((*pMirrored_rx_portmask), mirroring_port))
+        return RT_ERR_PORT_MASK;
+
+    /* Configure source portmask */
+    if ((retVal = rtksw_switch_portmask_L2P_get(unit, pMirrored_rx_portmask, &rxPmask)) != RT_ERR_OK)
+        return retVal;
+
+    if ((retVal = rtksw_switch_portmask_L2P_get(unit, pMirrored_tx_portmask, &txPmask)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_setAsicRegBits(unit, RTL8367D_REG_MIRROR_SRC_PMSK, RTL8367D_MIRROR_TX_PMSK_MASK, txPmask)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_setAsicRegBits(unit, RTL8367D_REG_MIRROR_SRC_PMSK, RTL8367D_MIRROR_RX_PMSK_MASK, rxPmask)) != RT_ERR_OK)
+        return retVal;
+
+    /* Configure monitor(destination) port */
+    if((retVal = rtl8367d_setAsicRegBits(unit, RTL8367D_REG_MIRROR_CTRL, RTL8367D_MIRROR_MONITOR_PORT_MASK, rtksw_switch_port_L2P_get(unit, mirroring_port))) != RT_ERR_OK)
+        return retVal;
+
+    return RT_ERR_OK;
+
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_portBased_get
+ * Description:
+ *      Get port mirror function.
+ * Input:
+ *      unit        - Unit ID
+ * Output:
+ *      pMirroring_port         - Monitor port.
+ *      pMirrored_rx_portmask   - Rx mirror port mask.
+ *      pMirrored_tx_portmask   - Tx mirror port mask.
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_INPUT        - Invalid input parameters.
+ * Note:
+ *      The API is to get mirror function of source port and mirror port.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_portBased_get(rtksw_uint32 unit, rtksw_port_t *pMirroring_port, rtksw_portmask_t *pMirrored_rx_portmask, rtksw_portmask_t *pMirrored_tx_portmask)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 rxPmask;
+    rtksw_uint32 txPmask;
+    rtksw_uint32 mport;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if(NULL == pMirrored_rx_portmask)
+        return RT_ERR_NULL_POINTER;
+
+    if(NULL == pMirrored_tx_portmask)
+        return RT_ERR_NULL_POINTER;
+
+    if(NULL == pMirroring_port)
+        return RT_ERR_NULL_POINTER;
+
+    /* Get source portmask */
+    if((retVal = rtl8367d_getAsicRegBits(unit, RTL8367D_REG_MIRROR_SRC_PMSK, RTL8367D_MIRROR_TX_PMSK_MASK, &txPmask)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_getAsicRegBits(unit, RTL8367D_REG_MIRROR_SRC_PMSK, RTL8367D_MIRROR_RX_PMSK_MASK, &rxPmask)) != RT_ERR_OK)
+        return retVal;
+
+    if ((retVal = rtksw_switch_portmask_P2L_get(unit, txPmask, pMirrored_tx_portmask)) != RT_ERR_OK)
+            return retVal;
+
+    if ((retVal = rtksw_switch_portmask_P2L_get(unit, rxPmask, pMirrored_rx_portmask)) != RT_ERR_OK)
+            return retVal;
+
+    /* Get monitor(destination) port */
+    if((retVal = rtl8367d_getAsicRegBits(unit, RTL8367D_REG_MIRROR_CTRL, RTL8367D_MIRROR_MONITOR_PORT_MASK, &mport)) != RT_ERR_OK)
+        return retVal;
+
+    *pMirroring_port = rtksw_switch_port_P2L_get(unit, mport);
+    return RT_ERR_OK;
+
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_portIso_set
+ * Description:
+ *      Set mirror port isolation.
+ * Input:
+ *      unit        - Unit ID
+ *      enable      - Mirror isolation status.
+ * Output:
+ *      None
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_ENABLE       - Invalid enable input
+ * Note:
+ *      The API is to set mirror isolation function that prevent normal forwarding packets to miror port.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_portIso_set(rtksw_uint32 unit, rtksw_enable_t enable)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 isoEn;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if (enable >= RTKSW_ENABLE_END)
+        return RT_ERR_ENABLE;
+
+    isoEn = (enable == RTKSW_ENABLED) ? 1 : 0;
+    if ((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL, RTL8367D_MIRROR_ISO_OFFSET, isoEn)) != RT_ERR_OK)
+        return retVal;
+
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_portIso_get
+ * Description:
+ *      Get mirror port isolation.
+ * Input:
+ *      unit        - Unit ID
+ * Output:
+ *      pEnable |Mirror isolation status.
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_INPUT        - Invalid input parameters.
+ * Note:
+ *      The API is to get mirror isolation status.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_portIso_get(rtksw_uint32 unit, rtksw_enable_t *pEnable)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 isoEn;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if(NULL == pEnable)
+        return RT_ERR_NULL_POINTER;
+
+    if ((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL, RTL8367D_MIRROR_ISO_OFFSET, &isoEn)) != RT_ERR_OK)
+        return retVal;
+
+    *pEnable = (isoEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_vlanLeaky_set
+ * Description:
+ *      Set mirror VLAN leaky.
+ * Input:
+ *      unit        - Unit ID
+ *      txenable    - TX leaky enable.
+ *      rxenable    - RX leaky enable.
+ * Output:
+ *      None
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_ENABLE       - Invalid enable input
+ * Note:
+ *      The API is to set mirror VLAN leaky function forwarding packets to miror port.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_vlanLeaky_set(rtksw_uint32 unit, rtksw_enable_t txenable, rtksw_enable_t rxenable)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 txEn, rxEn;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if ((txenable >= RTKSW_ENABLE_END) ||(rxenable >= RTKSW_ENABLE_END))
+        return RT_ERR_ENABLE;
+
+    txEn = (txenable == RTKSW_ENABLED) ? 1 : 0;
+    rxEn = (rxenable == RTKSW_ENABLED) ? 1 : 0;
+    if ((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_TX_VLAN_LEAKY_OFFSET, txEn)) != RT_ERR_OK)
+        return retVal;
+
+    if ((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_RX_VLAN_LEAKY_OFFSET, rxEn)) != RT_ERR_OK)
+        return retVal;
+
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_vlanLeaky_get
+ * Description:
+ *      Get mirror VLAN leaky.
+ * Input:
+ *      unit        - Unit ID
+ * Output:
+ *      pTxenable - TX leaky enable.
+ *      pRxenable - RX leaky enable.
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_INPUT        - Invalid input parameters.
+ * Note:
+ *      The API is to get mirror VLAN leaky status.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_vlanLeaky_get(rtksw_uint32 unit, rtksw_enable_t *pTxenable, rtksw_enable_t *pRxenable)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 txEn, rxEn;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if( (NULL == pTxenable) || (NULL == pRxenable) )
+        return RT_ERR_NULL_POINTER;
+
+    if ((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_TX_VLAN_LEAKY_OFFSET, &txEn)) != RT_ERR_OK)
+        return retVal;
+
+    if ((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_RX_VLAN_LEAKY_OFFSET, &rxEn)) != RT_ERR_OK)
+        return retVal;
+
+    *pTxenable = (txEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    *pRxenable = (rxEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_isolationLeaky_set
+ * Description:
+ *      Set mirror Isolation leaky.
+ * Input:
+ *      unit        - Unit ID
+ *      txenable    - TX leaky enable.
+ *      rxenable    - RX leaky enable.
+ * Output:
+ *      None
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_ENABLE       - Invalid enable input
+ * Note:
+ *      The API is to set mirror VLAN leaky function forwarding packets to miror port.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_isolationLeaky_set(rtksw_uint32 unit, rtksw_enable_t txenable, rtksw_enable_t rxenable)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 txEn, rxEn;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if ((txenable >= RTKSW_ENABLE_END) ||(rxenable >= RTKSW_ENABLE_END))
+        return RT_ERR_ENABLE;
+
+    txEn = (txenable == RTKSW_ENABLED) ? 1 : 0;
+    rxEn = (rxenable == RTKSW_ENABLED) ? 1 : 0;
+    if ((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_TX_ISOLATION_LEAKY_OFFSET, txEn)) != RT_ERR_OK)
+        return retVal;
+
+    if ((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_RX_ISOLATION_LEAKY_OFFSET, rxEn)) != RT_ERR_OK)
+        return retVal;
+
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_isolationLeaky_get
+ * Description:
+ *      Get mirror isolation leaky.
+ * Input:
+ *      unit        - Unit ID
+ * Output:
+ *      pTxenable - TX leaky enable.
+ *      pRxenable - RX leaky enable.
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_INPUT        - Invalid input parameters.
+ * Note:
+ *      The API is to get mirror isolation leaky status.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_isolationLeaky_get(rtksw_uint32 unit, rtksw_enable_t *pTxenable, rtksw_enable_t *pRxenable)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 txEn, rxEn;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if( (NULL == pTxenable) || (NULL == pRxenable) )
+        return RT_ERR_NULL_POINTER;
+
+    if ((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_TX_ISOLATION_LEAKY_OFFSET, &txEn)) != RT_ERR_OK)
+        return retVal;
+
+    if ((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_RX_ISOLATION_LEAKY_OFFSET, &rxEn)) != RT_ERR_OK)
+        return retVal;
+
+    *pTxenable = (txEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    *pRxenable = (rxEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_keep_set
+ * Description:
+ *      Set mirror packet format keep.
+ * Input:
+ *      unit        - Unit ID
+ *      mode        - mirror keep mode.
+ * Output:
+ *      None
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_ENABLE       - Invalid enable input
+ * Note:
+ *      The API is to set  -mirror keep mode.
+ *      The mirror keep mode is as following:
+ *      - MIRROR_FOLLOW_VLAN
+ *      - MIRROR_KEEP_ORIGINAL
+ *      - MIRROR_KEEP_END
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_keep_set(rtksw_uint32 unit, rtksw_mirror_keep_t mode)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 keepMode;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if (mode >= MIRROR_KEEP_END)
+        return RT_ERR_ENABLE;
+
+    keepMode = (mode == MIRROR_FOLLOW_VLAN) ? 0 : 1;
+    if ((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_REALKEEP_EN_OFFSET, keepMode)) != RT_ERR_OK)
+        return retVal;
+
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_keep_get
+ * Description:
+ *      Get mirror packet format keep.
+ * Input:
+ *      unit        - Unit ID
+ * Output:
+ *      pMode -mirror keep mode.
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_INPUT        - Invalid input parameters.
+ * Note:
+ *      The API is to get mirror keep mode.
+ *      The mirror keep mode is as following:
+ *      - MIRROR_FOLLOW_VLAN
+ *      - MIRROR_KEEP_ORIGINAL
+ *      - MIRROR_KEEP_END
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_keep_get(rtksw_uint32 unit, rtksw_mirror_keep_t *pMode)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 keepMode;
+
+    /* Check initialization state */
+    RTKSW_CHK_INIT_STATE(unit);
+
+    if(NULL == pMode)
+        return RT_ERR_NULL_POINTER;
+
+    if ((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_CTRL2, RTL8367D_MIRROR_REALKEEP_EN_OFFSET, &keepMode)) != RT_ERR_OK)
+        return retVal;
+
+    *pMode = (keepMode == 0) ? MIRROR_FOLLOW_VLAN : MIRROR_KEEP_ORIGINAL;
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_override_set
+ * Description:
+ *      Set port mirror override function.
+ * Input:
+ *      unit        - Unit ID
+ *      rxMirror    - 1: output mirrored packet, 0: output normal forward packet
+ *      txMirror    - 1: output mirrored packet, 0: output normal forward packet
+ *      aclMirror   - 1: output mirrored packet, 0: output normal forward packet
+ * Output:
+ *      None
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ * Note:
+ *      The API is to set mirror override function.
+ *      This function control the output format when a port output
+ *      normal forward & mirrored packet at the same time.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_override_set(rtksw_uint32 unit, rtksw_enable_t rxMirror, rtksw_enable_t txMirror, rtksw_enable_t aclMirror)
+{
+    rtksw_api_ret_t retVal;
+
+    if( (rxMirror >= RTKSW_ENABLE_END) || (txMirror >= RTKSW_ENABLE_END) || (aclMirror >= RTKSW_ENABLE_END))
+        return RT_ERR_ENABLE;
+
+    if((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_OVERRIDE_CFG, RTL8367D_MIRROR_RX_OVERRIDE_EN_OFFSET, (rxMirror == RTKSW_ENABLED) ? 1 : 0)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_OVERRIDE_CFG, RTL8367D_MIRROR_TX_OVERRIDE_EN_OFFSET, (txMirror == RTKSW_ENABLED) ? 1 : 0)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_setAsicRegBit(unit, RTL8367D_REG_MIRROR_OVERRIDE_CFG, RTL8367D_MIRROR_ACL_OVERRIDE_EN_OFFSET, (aclMirror == RTKSW_ENABLED) ? 1 : 0)) != RT_ERR_OK)
+        return retVal;
+
+    return RT_ERR_OK;
+}
+
+/* Function Name:
+ *      dal_rtl8367d_mirror_override_get
+ * Description:
+ *      Get port mirror override function.
+ * Input:
+ *      unit        - Unit ID
+ * Output:
+ *      pRxMirror       - 1: output mirrored packet, 0: output normal forward packet
+ *      pTxMirror       - 1: output mirrored packet, 0: output normal forward packet
+ *      pAclMirror      - 1: output mirrored packet, 0: output normal forward packet
+ * Return:
+ *      RT_ERR_OK           - OK
+ *      RT_ERR_FAILED       - Failed
+ *      RT_ERR_SMI          - SMI access error
+ *      RT_ERR_NULL_POINTER - Null Pointer
+ * Note:
+ *      The API is to Get mirror override function.
+ *      This function control the output format when a port output
+ *      normal forward & mirrored packet at the same time.
+ */
+rtksw_api_ret_t dal_rtl8367d_mirror_override_get(rtksw_uint32 unit, rtksw_enable_t *pRxMirror, rtksw_enable_t *pTxMirror, rtksw_enable_t *pAclMirror)
+{
+    rtksw_api_ret_t retVal;
+    rtksw_uint32 txEn, rxEn, aclEn;
+
+    if( (pRxMirror == NULL) || (pTxMirror == NULL) || (pAclMirror == NULL))
+        return RT_ERR_ENABLE;
+
+    if((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_OVERRIDE_CFG, RTL8367D_MIRROR_RX_OVERRIDE_EN_OFFSET, &rxEn)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_OVERRIDE_CFG, RTL8367D_MIRROR_TX_OVERRIDE_EN_OFFSET, &txEn)) != RT_ERR_OK)
+        return retVal;
+
+    if((retVal = rtl8367d_getAsicRegBit(unit, RTL8367D_REG_MIRROR_OVERRIDE_CFG, RTL8367D_MIRROR_ACL_OVERRIDE_EN_OFFSET, &aclEn)) != RT_ERR_OK)
+        return retVal;
+
+    *pRxMirror = (rxEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    *pTxMirror = (txEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    *pAclMirror = (aclEn == 1) ? RTKSW_ENABLED : RTKSW_DISABLED;
+    return RT_ERR_OK;
+}
+
+
