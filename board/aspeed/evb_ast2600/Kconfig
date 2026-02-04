@@ -18,4 +18,8 @@ config B300
        bool "NVIDIA B300"
        default n
 
+config HGXR
+       bool "NVIDIA HGXR"
+       default n
+
 endif

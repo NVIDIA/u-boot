@@ -71,6 +71,13 @@ config TARGET_NVIDIA_B300
 	help
 	  nvidia-b300 is a NVIDIA B300 board which is
 	  equipped with AST2600.
+
+config TARGET_NVIDIA_HGXR
+	bool "Support nvidia-hgxr"
+	depends on ASPEED_AST2600
+	help
+	  nvidia-hgxr is a NVIDIA HGXR board which is
+	  equipped with AST2600.
 endchoice
 
 source "board/aspeed/evb_ast2600/Kconfig"
@@ -82,5 +89,6 @@ source "board/aspeed/ast2600_dcscm/Kconfig"
 source "board/qualcomm/dc-scm-v1/Kconfig"
 source "board/nvidia/gb200nvl/Kconfig"
 source "board/nvidia/b300/Kconfig"
+source "board/nvidia/hgxr/Kconfig"
 
 endif
