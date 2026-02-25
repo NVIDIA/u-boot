@@ -1,7 +1,7 @@
+// SPDX-FileCopyrightText: Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Device Tree Source extras for U-Boot for the Moonraker
- * Copyright (C) Nvidia
  */
 /dts-v1/;
 
