@@ -433,10 +433,6 @@ static int should_load_env(void)
 #endif
 }
 
-#ifdef CONFIG_GLACIER_SECURE_FACTORY_RESET
-bool glacier_check_factory_reset(void);
-#endif
-
 static int initr_env(void)
 {
 	/* initialize environment */
@@ -444,41 +440,19 @@ static int initr_env(void)
 		env_relocate();
 	else
 		set_default_env(NULL, 0);
-
 #ifdef CONFIG_U_BOOT_FACTORY_RESET
-	{
-	bool do_secure_factory_reset = false;
-	bool do_reset;
-	bool hold_arm;
-	char *openbmconce;
-	char *reset_type;
+	char *factory_reset_status =  env_get("openbmconce");
 
-#ifdef CONFIG_GLACIER_SECURE_FACTORY_RESET
-	do_secure_factory_reset = glacier_check_factory_reset();
-#endif
-	openbmconce = env_get("openbmconce");
-	hold_arm = do_secure_factory_reset ||
-		(env_get("hold-arm-rst") &&
-		 strcmp(env_get("hold-arm-rst"), "yes") == 0);
-	do_reset = do_secure_factory_reset ||
-		(openbmconce &&
-		 strcmp(openbmconce, "factory-reset") == 0);
-	// if factory reset is requested, set the environment variables
-	if (do_reset) {
+	if (factory_reset_status && strcmp(factory_reset_status, "factory-reset") == 0) {
 		set_default_env("factory reset requested", 0);
-		if (hold_arm)
-			if (env_set("hold_arm_rst", "yes") != 0)
-				puts("Error: failed to set hold-arm-rst env\n");
-		// decide the reset type to pass to initramfs
-		reset_type = do_secure_factory_reset ?
-		"secure-factory-reset" : "factory-reset";
-		if (env_set("openbmconce", reset_type) != 0)
-			puts("Error: failed to set factory reset command\n");
-		else if (env_save() != 0)
-			puts("Error: failed to save factory reset env\n");
-		else
-			puts("u-boot factory reset succeeded\n");
-	}
+		if (env_set("openbmconce", "factory-reset") != 0) {
+			puts("failed to set linux confinguration factory reset command\n");
+		} else {
+			if (env_save() != 0)
+				puts("failed to save linux confinguration factory reset command\n");
+			else
+				puts("u-boot factory reset succeeded\n");
+		}
 	}
 #endif
 

@@ -193,11 +193,6 @@
 	pinctrl-0 = <&pinctrl_i2c9_default>;
 };
 
-// Glacier I2C
-&i2c15 {
-	status = "okay";
-};
-
 &pcie_bridge {
 	status = "okay";
 };

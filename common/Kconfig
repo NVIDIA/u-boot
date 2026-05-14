@@ -662,14 +662,6 @@ config U_BOOT_FACTORY_RESET
 	help
 	   defines if U-BOOT factory reset is needed
 
-config GLACIER_SECURE_FACTORY_RESET
-	bool "Glacier ERoT secure factory reset query"
-	default n
-	select U_BOOT_FACTORY_RESET
-	help
-	   Query the Glacier ERoT device over I2C VDM during boot to
-	   determine whether a secure factory reset has been requested.
-
 config HAS_ETH1
 	bool "Configure if eth1 is used"
 	default n
