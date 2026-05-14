@@ -452,15 +452,14 @@ static int initr_env(void)
 	bool hold_arm;
 	char *openbmconce;
 	char *reset_type;
-	char *hold_arm_rst_str = "hold-arm-rst";
 
 #ifdef CONFIG_GLACIER_SECURE_FACTORY_RESET
 	do_secure_factory_reset = glacier_check_factory_reset();
 #endif
 	openbmconce = env_get("openbmconce");
 	hold_arm = do_secure_factory_reset ||
-		(env_get(hold_arm_rst_str) &&
-		 strcmp(env_get(hold_arm_rst_str), "yes") == 0);
+		(env_get("hold-arm-rst") &&
+		 strcmp(env_get("hold-arm-rst"), "yes") == 0);
 	do_reset = do_secure_factory_reset ||
 		(openbmconce &&
 		 strcmp(openbmconce, "factory-reset") == 0);
@@ -468,7 +467,7 @@ static int initr_env(void)
 	if (do_reset) {
 		set_default_env("factory reset requested", 0);
 		if (hold_arm)
-			if (env_set(hold_arm_rst_str, "yes") != 0)
+			if (env_set("hold_arm_rst", "yes") != 0)
 				puts("Error: failed to set hold-arm-rst env\n");
 		// decide the reset type to pass to initramfs
 		reset_type = do_secure_factory_reset ?
