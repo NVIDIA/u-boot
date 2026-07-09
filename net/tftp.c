@@ -489,6 +489,22 @@ static void tftp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
 						       NULL, 10);
 				debug("Blocksize ack: %s, %d\n",
 				      (char *)pkt + i + 8, tftp_block_size);
+				/*
+				 * RFC 2348: the server must not acknowledge a
+				 * block size larger than the one we offered,
+				 * and a zero/too-small value would stall the
+				 * transfer (the completion test compares the
+				 * received length against tftp_block_size).
+				 * Reject bogus values and fall back to the
+				 * safe default.
+				 */
+				if (tftp_block_size < 8 ||
+				    tftp_block_size > tftp_block_size_option) {
+					printf("TFTP: bad blksize %d, using %d\n",
+					       tftp_block_size,
+					       TFTP_BLOCK_SIZE);
+					tftp_block_size = TFTP_BLOCK_SIZE;
+				}
 			}
 #ifdef CONFIG_TFTP_TSIZE
 			if (strcmp((char *)pkt+i, "tsize") == 0) {

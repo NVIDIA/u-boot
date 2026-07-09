@@ -831,28 +831,53 @@ static void dhcp_process_options(uchar *popt, uchar *end)
 #endif
 
 	while (popt < end && *popt != 0xff) {
-		oplen = *(popt + 1);
-		switch (*popt) {
-		case 0:
-			oplen = -1; /* Pad omits len byte */
+		/* Pad option (0) has neither a length byte nor a payload */
+		if (*popt == 0) {
+			popt++;
+			continue;
+		}
+
+		/* Every other option must carry a length byte */
+		if (popt + 1 >= end)
 			break;
+
+		oplen = *(popt + 1);
+
+		/* Reject options whose payload extends past the buffer end */
+		if (popt + 2 + oplen > end)
+			break;
+
+		/*
+		 * The bound above only validates the declared oplen; the
+		 * fixed-width handlers below read 4 (or 1) bytes regardless,
+		 * so each one must also require a payload that long.
+		 */
+		switch (*popt) {
 		case 1:
+			if (oplen < 4)
+				break;
 			net_copy_ip(&net_netmask, (popt + 2));
 			break;
 #if defined(CONFIG_CMD_SNTP) && defined(CONFIG_BOOTP_TIMEOFFSET)
 		case 2:		/* Time offset	*/
+			if (oplen < 4)
+				break;
 			to_ptr = &net_ntp_time_offset;
 			net_copy_u32((u32 *)to_ptr, (u32 *)(popt + 2));
 			net_ntp_time_offset = ntohl(net_ntp_time_offset);
 			break;
 #endif
 		case 3:
+			if (oplen < 4)
+				break;
 			net_copy_ip(&net_gateway, (popt + 2));
 			break;
 		case 6:
+			if (oplen < 4)
+				break;
 			net_copy_ip(&net_dns_server, (popt + 2));
 #if defined(CONFIG_BOOTP_DNS2)
-			if (*(popt + 1) > 4)
+			if (oplen >= 8)
 				net_copy_ip(&net_dns_server2, (popt + 2 + 4));
 #endif
 			break;
@@ -874,18 +899,26 @@ static void dhcp_process_options(uchar *popt, uchar *end)
 			break;
 #if defined(CONFIG_CMD_SNTP) && defined(CONFIG_BOOTP_NTPSERVER)
 		case 42:	/* NTP server IP */
+			if (oplen < 4)
+				break;
 			net_copy_ip(&net_ntp_server, (popt + 2));
 			break;
 #endif
 		case 51:
+			if (oplen < 4)
+				break;
 			net_copy_u32(&dhcp_leasetime, (u32 *)(popt + 2));
 			break;
 		case 52:
+			if (oplen < 1)
+				break;
 			dhcp_option_overload = popt[2];
 			break;
 		case 53:	/* Ignore Message Type Option */
 			break;
 		case 54:
+			if (oplen < 4)
+				break;
 			net_copy_ip(&dhcp_server_ip, (popt + 2));
 			break;
 		case 58:	/* Ignore Renewal Time Option */
@@ -916,10 +949,32 @@ static void dhcp_process_options(uchar *popt, uchar *end)
 	}
 }
 
-static void dhcp_packet_process_options(struct bootp_hdr *bp)
+/*
+ * End of the vendor/options area, bounded by both the declared field size
+ * and the number of bytes actually received: check_reply_packet() only
+ * guarantees the fixed header, so the options field may be short or absent.
+ */
+static uchar *dhcp_vend_end(struct bootp_hdr *bp, unsigned int len)
+{
+	const unsigned int fixed_size = BOOTP_HDR_SIZE - OPT_FIELD_SIZE;
+	unsigned int vend_len = 0;
+
+	if (len > fixed_size)
+		vend_len = len - fixed_size;
+	if (vend_len > OPT_FIELD_SIZE)
+		vend_len = OPT_FIELD_SIZE;
+
+	return (uchar *)bp->bp_vend + vend_len;
+}
+
+static void dhcp_packet_process_options(struct bootp_hdr *bp, unsigned int len)
 {
 	uchar *popt = (uchar *)&bp->bp_vend[4];
-	uchar *end = popt + BOOTP_HDR_SIZE;
+	uchar *end = dhcp_vend_end(bp, len);
+
+	/* The magic cookie must lie within the received options field */
+	if (popt > end)
+		return;
 
 	if (net_read_u32((u32 *)&bp->bp_vend[0]) != htonl(BOOTP_VENDOR_MAGIC))
 		return;
@@ -945,22 +1000,31 @@ static void dhcp_packet_process_options(struct bootp_hdr *bp)
 	}
 }
 
-static int dhcp_message_type(unsigned char *popt)
+static int dhcp_message_type(unsigned char *popt, unsigned char *end)
 {
+	if (popt + 4 > end)
+		return -1;
 	if (net_read_u32((u32 *)popt) != htonl(BOOTP_VENDOR_MAGIC))
 		return -1;
 
 	popt += 4;
-	while (*popt != 0xff) {
-		if (*popt == 53)	/* DHCP Message Type */
-			return *(popt + 2);
-		if (*popt == 0)	{
+	while (popt < end && *popt != 0xff) {
+		if (*popt == 0) {
 			/* Pad */
 			popt += 1;
-		} else {
-			/* Scan through all options */
-			popt += *(popt + 1) + 2;
+			continue;
 		}
+		if (*popt == 53) {	/* DHCP Message Type */
+			/* Need the length byte and the value byte */
+			if (popt + 2 >= end)
+				return -1;
+			return *(popt + 2);
+		}
+		/* Every non-pad option carries a length byte */
+		if (popt + 1 >= end)
+			break;
+		/* Scan through all options */
+		popt += *(popt + 1) + 2;
 	}
 	return -1;
 }
@@ -1066,7 +1130,7 @@ static void dhcp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
 			    CONFIG_SYS_BOOTFILE_PREFIX,
 			    strlen(CONFIG_SYS_BOOTFILE_PREFIX)) == 0) {
 #endif	/* CONFIG_SYS_BOOTFILE_PREFIX */
-			dhcp_packet_process_options(bp);
+			dhcp_packet_process_options(bp, len);
 			efi_net_set_dhcp_ack(pkt, len);
 
 			debug("TRANSITIONING TO REQUESTING STATE\n");
@@ -1083,8 +1147,9 @@ static void dhcp_handler(uchar *pkt, unsigned dest, struct in_addr sip,
 	case REQUESTING:
 		debug("DHCP State: REQUESTING\n");
 
-		if (dhcp_message_type((u8 *)bp->bp_vend) == DHCP_ACK) {
-			dhcp_packet_process_options(bp);
+		if (dhcp_message_type((u8 *)bp->bp_vend,
+				      dhcp_vend_end(bp, len)) == DHCP_ACK) {
+			dhcp_packet_process_options(bp, len);
 			/* Store net params from reply */
 			store_net_params(bp);
 			dhcp_state = BOUND;
