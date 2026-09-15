@@ -63,6 +63,7 @@ enum ftgmac100_model {
  * @tx_index: Transmit descriptor index in @txdes
  * @rx_index: Receive descriptor index in @rxdes
  * @phy_addr: The PHY interface address to use
+ * @phy_node: The PHY device-tree node
  * @phydev: The PHY device backing the MAC
  * @bus: The mdio bus
  * @phy_mode: The mode of the PHY interface (rgmii, rmii, ...)
@@ -81,6 +82,7 @@ struct ftgmac100_data {
 	int rx_index;
 
 	u32 phy_addr;
+	ofnode phy_node;
 	struct phy_device *phydev;
 	struct mii_dev *bus;
 	u32 phy_mode;
@@ -227,6 +229,8 @@ static int ftgmac100_phy_init(struct udevice *dev)
 	phydev = phy_connect(priv->bus, priv->phy_addr, dev, priv->phy_mode);
 	if (!phydev)
 		return -ENODEV;
+	if (ofnode_valid(priv->phy_node))
+		phydev->node = priv->phy_node;
 
 	if (!priv->ncsi_mode)
 		phydev->supported &= PHY_GBIT_FEATURES;
@@ -539,6 +543,7 @@ static int ftgmac100_ofdata_to_platdata(struct udevice *dev)
 	const char *phy_mode;
 	int offset = 0;
 
+	priv->phy_node = ofnode_null();
 	pdata->iobase = devfdt_get_addr(dev);
 	pdata->phy_interface = -1;
 	phy_mode = dev_read_string(dev, "phy-mode");
@@ -554,6 +559,7 @@ static int ftgmac100_ofdata_to_platdata(struct udevice *dev)
 				       "phy-handle");
 	if (offset > 0) {
 		priv->phy_addr = fdtdec_get_int(gd->fdt_blob, offset, "reg", -1);
+		priv->phy_node = offset_to_ofnode(offset);
 	} else {
 		priv->phy_addr = 0;
 	}
