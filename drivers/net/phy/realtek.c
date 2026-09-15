@@ -7,6 +7,7 @@
  * Copyright 2016 Karsten Merker <merker@debian.org>
  */
 #include <common.h>
+#include <dm.h>
 #include <linux/bitops.h>
 #include <phy.h>
 
@@ -61,6 +62,13 @@
 #define RTL8211F_MODE_SEL			(BIT(2) | BIT(1) | BIT(0))
 #define RTL8211F_SGMII_RGMII_PM			0x4
 #define RTL8211F_SGMII_RGMII_MP			0x5
+
+#define MIIM_RTL8211F_SGMII_TX_450MV_REG10	0x1048
+#define MIIM_RTL8211F_SGMII_TX_450MV_REG11	0x3490
+#define MIIM_RTL8211F_SGMII_TX_600MV_REG10	0x1096
+#define MIIM_RTL8211F_SGMII_TX_600MV_REG11	0xb490
+#define MIIM_RTL8211F_SGMII_TX_800MV_REG10	0x11dc
+#define MIIM_RTL8211F_SGMII_TX_800MV_REG11	0xe490
 
 static int rtl8211f_phy_extread(struct phy_device *phydev, int addr,
 				int devaddr, int regnum)
@@ -152,6 +160,58 @@ static int rtl8211x_config(struct phy_device *phydev)
 	return 0;
 }
 
+static int rtl8211f_configure_tx_amplitude(struct phy_device *phydev)
+{
+	int orig_page;
+	u32 amplitude;
+	u16 reg10;
+	u16 reg11;
+	ofnode node;
+
+	node = phy_get_ofnode(phydev);
+	if (!ofnode_valid(node))
+		return 0;
+
+	amplitude = ofnode_read_u32_default(node,
+			"realtek,sgmii-tx-amplitude-millivolt", 0);
+	switch (amplitude) {
+	case 0:
+		return 0;
+	case 450:
+		reg10 = MIIM_RTL8211F_SGMII_TX_450MV_REG10;
+		reg11 = MIIM_RTL8211F_SGMII_TX_450MV_REG11;
+		break;
+	case 600:
+		reg10 = MIIM_RTL8211F_SGMII_TX_600MV_REG10;
+		reg11 = MIIM_RTL8211F_SGMII_TX_600MV_REG11;
+		break;
+	case 800:
+		reg10 = MIIM_RTL8211F_SGMII_TX_800MV_REG10;
+		reg11 = MIIM_RTL8211F_SGMII_TX_800MV_REG11;
+		break;
+	default:
+		dev_err(phydev->dev, "unsupported SGMII TX amplitude %u mV\n",
+			amplitude);
+		return -EINVAL;
+	}
+
+	orig_page = phy_read(phydev, MDIO_DEVAD_NONE,
+			     MIIM_RTL8211F_PAGE_SELECT);
+	if (orig_page < 0)
+		return orig_page;
+
+	/* Use the vendor indirect window for 0xdcd:0x10 and 0xdcd:0x11. */
+	phy_write(phydev, MDIO_DEVAD_NONE, MIIM_RTL8211F_PAGE_SELECT, 0xa43);
+	phy_write(phydev, MDIO_DEVAD_NONE, 0x1b, 0xdcd0);
+	phy_write(phydev, MDIO_DEVAD_NONE, 0x1c, reg10);
+	phy_write(phydev, MDIO_DEVAD_NONE, 0x1b, 0xdcd2);
+	phy_write(phydev, MDIO_DEVAD_NONE, 0x1c, reg11);
+	phy_write(phydev, MDIO_DEVAD_NONE,
+		  MIIM_RTL8211F_PAGE_SELECT, orig_page);
+
+	return 0;
+}
+
 static int rtl8211f_config(struct phy_device *phydev)
 {
 	u16 reg;
@@ -190,6 +250,8 @@ static int rtl8211f_config(struct phy_device *phydev)
 		reg = phy_read(phydev, MDIO_DEVAD_NONE, 0);
 		reg |= BIT(15);
 		phy_write(phydev, MDIO_DEVAD_NONE, 0, reg);
+
+		rtl8211f_configure_tx_amplitude(phydev);
 
 		/* SGMII ANAR (SGMII Auto-Negotiation Advertising Register) */
 		/*Link status : set to 1 , Duplex Mode : Full Duplex*/

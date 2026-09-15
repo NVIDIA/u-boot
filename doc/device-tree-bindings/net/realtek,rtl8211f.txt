@@ -1,0 +1,15 @@
+Realtek RTL8211F Gigabit Ethernet PHY
+
+Optional properties:
+
+- realtek,sgmii-tx-amplitude-millivolt: SGMII transmit amplitude in
+  millivolts. Supported values are 450, 600, and 800. If omitted, the
+  hardware default is preserved. The setting is applied after the final
+  PHY reset.
+
+Example:
+
+	ethernet-phy@1 {
+		reg = <1>;
+		realtek,sgmii-tx-amplitude-millivolt = <600>;
+	};
