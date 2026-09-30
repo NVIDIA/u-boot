@@ -36,6 +36,11 @@ CONFIG_ARMV7_PSCI_NR_CPUS=2
 CONFIG_NR_DRAM_BANKS=1
 CONFIG_TPL_SYS_MALLOC_F_LEN=0x800
 CONFIG_FIT=y
+# Enables the AST2600's hardware Hash and Crypto Engine (HACE) for FIT
+# SHA256 verification (software SHA256 was the dominant cost of FIT
+# load+verify). CONFIG_ASPEED_ACRY is deliberately NOT enabled alongside
+# it -- caused a hard SPL hang on this board.
+CONFIG_ASPEED_HACE=y
 CONFIG_USE_BOOTARGS=y
 CONFIG_BOOTARGS="console=ttyS4,115200n8 root=/dev/ram rw"
 CONFIG_USE_BOOTCOMMAND=y

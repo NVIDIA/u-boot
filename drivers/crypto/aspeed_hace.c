@@ -133,6 +133,8 @@ static void aspeed_ahash_fill_padding(struct aspeed_hash_ctx *ctx, unsigned int 
 
 static int hash_trigger(struct aspeed_hash_ctx *ctx, int hash_len)
 {
+	int rc;
+
 	if (readl(base + ASPEED_HACE_STS) & HACE_HASH_BUSY) {
 		debug("HACE error: engine busy\n");
 		return -EBUSY;
@@ -147,9 +149,26 @@ static int hash_trigger(struct aspeed_hash_ctx *ctx, int hash_len)
 	writel(ctx->method, base + ASPEED_HACE_HASH_CMD);
 
 	/* SHA512 hashing appears to have a througput of about 12MB/s */
-	return aspeed_hace_wait_completion(base + ASPEED_HACE_STS,
-					   HACE_HASH_ISR,
-					   1000 + (hash_len >> 3));
+	rc = aspeed_hace_wait_completion(base + ASPEED_HACE_STS,
+					 HACE_HASH_ISR,
+					 1000 + (hash_len >> 3));
+
+	/*
+	 * Restores the HACE error-reset workaround from upstream commit
+	 * 0fdcca145f ("aspeed/hace: Reset when error occurs") -- documented
+	 * errata on this IP block can silently corrupt results while still
+	 * reporting completion. Dropped when the driver moved to
+	 * accumulate/SG mode (ebf0f73fe7); never carried over into this path.
+	 */
+	if (readl(base + ASPEED_HACE_STS) & ~HACE_HASH_ISR) {
+		debug("HACE error 0x%08x, resetting\n",
+		      readl(base + ASPEED_HACE_STS));
+		writel(0x10, 0x1e6e2040);
+		mdelay(5);
+		writel(0x10, 0x1e6e2044);
+	}
+
+	return rc;
 }
 
 #if IS_ENABLED(CONFIG_SHA_PROG_HW_ACCEL)
@@ -275,14 +294,48 @@ static int sha_digest(const void *src, unsigned int length, void *digest,
 {
 	struct aspeed_hash_ctx *ctx;
 	int ret;
+	void *scratch = NULL;
 
+	/*
+	 * HACE's SG engine can only source from SDRAM (bit 31 set). FIT
+	 * sub-images are hashed directly from AHB-mapped SPI-NOR flash,
+	 * which silently returned an all-zero digest instead of failing
+	 * loudly (hw_shaN() wrappers discard sha_digest()'s -EINVAL). Copy
+	 * non-SDRAM sources into a scratch buffer and hash that instead.
+	 */
 	if (!((u32)src & BIT(31))) {
-		debug("HACE src out of bounds: can only copy from SDRAM\n");
-		return -EINVAL;
+		if (length == 0)
+		{
+			scratch = NULL;
+		}
+		else
+		{
+			scratch = memalign(8, length);
+			if (!scratch)
+			{
+				debug("HACE error: Cannot allocate %u-byte SDRAM scratch buffer for non-SDRAM source\n",
+				      length);
+				return -ENOMEM;
+			}
+			memcpy(scratch, src, length);
+			/* HACE is a non-coherent DMA engine; flush the cache
+			 * so it doesn't read stale/uninitialized memory. */
+			flush_dcache_range((unsigned long)scratch,
+					    (unsigned long)scratch + length);
+			src = scratch;
+		}
+
+		if (!((u32)src & BIT(31)))
+		{
+			debug("HACE src out of bounds: scratch buffer is not in SDRAM either\n");
+			free(scratch);
+			return -EINVAL;
+		}
 	}
 
 	if (readl(base + ASPEED_HACE_STS) & HACE_HASH_BUSY) {
 		debug("HACE error: engine busy\n");
+		free(scratch);
 		return -EBUSY;
 	}
 
@@ -291,6 +344,7 @@ static int sha_digest(const void *src, unsigned int length, void *digest,
 
 	if (!ctx) {
 		debug("HACE error: Cannot allocate memory for context\n");
+		free(scratch);
 		return -ENOMEM;
 	}
 	ctx->method = HASH_CMD_ACC_MODE | HACE_SHA_BE_EN | HACE_SG_EN;
@@ -321,6 +375,7 @@ static int sha_digest(const void *src, unsigned int length, void *digest,
 		memcpy(ctx->digest, sha512_iv, 64);
 		break;
 	default:
+		free(scratch);
 		return -ENOTSUPP;
 	}
 
@@ -342,6 +397,7 @@ static int sha_digest(const void *src, unsigned int length, void *digest,
 	ret = hash_trigger(ctx, length + ctx->bufcnt);
 	memcpy(digest, ctx->digest, ctx->digest_size);
 	free(ctx);
+	free(scratch);
 
 	return ret;
 }
