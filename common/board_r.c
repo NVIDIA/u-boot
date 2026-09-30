@@ -710,9 +710,15 @@ static int initr_bedbug(void)
 #ifdef CONFIG_ARCH_ASPEED
 int initr_reset_reason(void)
 {
-	/* Add reset reason to env */
+	/*
+	 * Only persist to SPI flash when reset_reason actually changed --
+	 * unconditional env_save() cost ~8.6-8.8s/boot in erase+write time.
+	 */
+	const char *cur_reset_reason = env_get("reset_reason");
+
 	env_set("reset_reason", gd->reset_reason);
-	env_save();
+	if (!cur_reset_reason || strcmp(cur_reset_reason, gd->reset_reason) != 0)
+		env_save();
 
 	return 0;
 }
